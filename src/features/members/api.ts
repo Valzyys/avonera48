@@ -1,6 +1,7 @@
 /** Client for the members' area: shop, orders, profile, chat and admin. */
 
 import type { Account } from "@/features/auth/AuthContext";
+import type { StageShow } from "../../../worker/stage";
 
 export class ApiError extends Error {
   constructor(
@@ -84,8 +85,12 @@ export interface Order {
   user_name?: string;
 }
 
+/** A show on sale, as the server reads it from the IDN Plus listing. */
+export type { StageShow };
+
 export const shop = {
   catalog: () => call<Catalog>("/api/shop/catalog"),
+  shows: () => call<{ shows: StageShow[] }>("/api/shop/shows").then((d) => d.shows),
   voucher: (code: string, kind: string, item: string) => call<{ code: string; discount: number; amount: number }>("/api/shop/voucher", { method: "POST", json: { code, kind, item } }),
   checkout: (kind: "ticket" | "membership", item: string, voucher?: string) => call<{ id: string; free?: boolean }>("/api/shop/checkout", { method: "POST", json: { kind, item, voucher } }),
   orders: () => call<{ orders: Order[] }>("/api/shop/orders").then((d) => d.orders),

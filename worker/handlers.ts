@@ -20,6 +20,8 @@ export interface Env extends AuthEnv {
   DATA_API_KEY?: string;
   /** Older name for DATA_API_KEY, still honoured. */
   JKT48CONNECT_API_KEY?: string;
+  /** Overrides the data API origin (a mirror or a test server). */
+  DATA_API_BASE?: string;
 }
 
 const UPSTREAM = "https://jkt48connect.com";

@@ -2,6 +2,7 @@
  * Shop: theater show tickets and memberships, paid through MYPG.
  *
  *   GET  /api/shop/catalog             prices, plans, what the viewer owns
+ *   GET  /api/shop/shows               the shows on sale (IDN Plus listing)
  *   POST /api/shop/voucher             { code, kind, item } → discount preview
  *   POST /api/shop/checkout            { kind: "ticket"|"membership", item, voucher? } → { id }
  *   GET  /api/shop/orders              the viewer's orders
@@ -14,13 +15,13 @@
 import { ensureSchema, getSetting } from "./db";
 import { body, fail, randomId, reply, str } from "./http";
 import { cancelPayment, checkPayment, createPayment, gatewayTime, paymentReady, type PaymentEnv, type PayStatus } from "./payment";
+import { parseStageList, type StageShow } from "./stage";
 
 export interface ShopEnv extends PaymentEnv {
   DB?: D1Database;
   ADMIN_EMAILS?: string;
-  DATA_API_KEY?: string;
-  JKT48CONNECT_API_KEY?: string;
-  DATA_API_BASE?: string;
+  /** Overrides the IDN Plus show listing (e.g. a mirror or a test server). */
+  SHOWS_API_URL?: string;
 }
 
 export interface Viewer {
@@ -75,33 +76,23 @@ export interface Plan {
 
 /* ---------- the theater schedule (server-trusted titles and dates) ---------- */
 
-interface Show {
-  slug: string;
-  title: string;
-  startsAt: string;
-  endsAt: string;
-}
+const SHOWS_URL = "https://v5.jkt48connect.com/api/jkt48/idnplus";
 
-const UPSTREAM = "https://jkt48connect.com";
-
-/** The upcoming schedule from the data API, cached at the edge for 5 minutes. */
-export async function theaterShows(env: ShopEnv): Promise<Show[] | null> {
-  const key = env.DATA_API_KEY || env.JKT48CONNECT_API_KEY;
-  if (!key) return null;
+/**
+ * The shows on sale, from the IDN Plus listing. Cached at the edge for a
+ * minute so a show turning live shows up quickly. Null when the listing
+ * can't be read.
+ */
+export async function theaterShows(env: ShopEnv): Promise<StageShow[] | null> {
   const cache = caches.default;
-  const cacheKey = new Request("https://shop.internal/theater?v=1");
+  const cacheKey = new Request("https://shop.internal/stage?v=1");
   const hit = await cache.match(cacheKey);
-  if (hit) return (await hit.json()) as Show[];
+  if (hit) return (await hit.json()) as StageShow[];
   try {
-    const res = await fetch(`${env.DATA_API_BASE || UPSTREAM}/api/v1/theater?page=1`, { headers: { "x-api-key": key, accept: "application/json" } });
-    const j = (await res.json()) as { data?: { reference_code: string; title: string; date: string; start_time: string; end_time?: string }[] };
-    const shows = (j.data ?? []).map((t) => ({
-      slug: t.reference_code.toLowerCase(),
-      title: t.title,
-      startsAt: `${t.date}T${t.start_time}:00+07:00`,
-      endsAt: `${t.date}T${t.end_time || t.start_time}:00+07:00`,
-    }));
-    await cache.put(cacheKey, new Response(JSON.stringify(shows), { headers: { "cache-control": "public, max-age=300" } }));
+    const res = await fetch(env.SHOWS_API_URL || SHOWS_URL, { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const shows = parseStageList(await res.json());
+    await cache.put(cacheKey, new Response(JSON.stringify(shows), { headers: { "cache-control": "public, max-age=60" } }));
     return shows;
   } catch {
     return null;
@@ -169,7 +160,7 @@ async function itemFor(env: ShopEnv, db: D1Database, viewer: Viewer, kind: strin
     const shows = await theaterShows(env);
     const show = shows?.find((s) => s.slug === item);
     if (!show) return { error: "That show isn’t on the schedule." };
-    if (Date.parse(show.endsAt) < Date.now()) return { error: "That show has already ended." };
+    if (show.status === "ended") return { error: "That show has already ended." };
     if (await db.prepare("SELECT 1 FROM tickets WHERE user_id = ? AND show_slug = ?").bind(viewer.id, item).first()) return { error: "You already have a ticket for this show.", owned: true };
     const price = await ticketPrice(db, item);
     if (price == null) return { error: "Tickets for this show aren’t on sale." };
@@ -389,6 +380,10 @@ export async function handleShop(request: Request, env: ShopEnv, viewer: Viewer,
   if (post && !sameOriginOk) return fail(403, "forbidden", "Cross-site requests are not allowed.");
 
   if (!post && path === "/catalog") return catalog(env, db, viewer);
+  if (!post && path === "/shows") {
+    const shows = await theaterShows(env);
+    return shows ? reply({ ok: true, shows }) : fail(502, "SHOWS_UNAVAILABLE", "The show list couldn’t be loaded. Try again in a moment.");
+  }
   if (post && path === "/voucher") return voucherPreview(env, db, viewer, request);
   if (post && path === "/checkout") return checkout(env, db, viewer, request);
   if (!post && path === "/orders") {

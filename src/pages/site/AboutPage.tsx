@@ -106,8 +106,8 @@ export default function AboutPage() {
                 Avonera48 brings them together on one page that is quick to read on a phone.
               </p>
               <p>
-                With a free account, members can also open the theater room, where shows are played through a licensed partner service. Avonera48 does not sell
-                tickets or publish content of its own.
+                With an account, members also get a dashboard where theater shows are played through a licensed partner service, with a ticket for a show or a
+                membership. Avonera48 does not publish content of its own.
               </p>
             </Section>
 
@@ -162,7 +162,7 @@ export default function AboutPage() {
               <p>There is no advertising and there are no analytics or tracking cookies.</p>
               <p>
                 An account stores your name, your email and a salted hash of your password; your password itself is never stored. Signing in sets a single session cookie
-                that keeps you signed in for 30 days. When you open the theater room, the partner service receives an anonymous account ID so a reload doesn’t count as a
+                that keeps you signed in for 30 days. When you watch a show, the partner service receives an anonymous account ID so a reload doesn’t count as a
                 new viewer.
               </p>
               <p>Your theme choice is stored in your own browser and never leaves your device.</p>

@@ -278,7 +278,7 @@ function AuthForm({
 
         <header className="auth-form__head">
           <h1>{mode === "login" ? "Welcome back." : "Get your ticket."}</h1>
-          <p>{mode === "login" ? "Sign in and take your seat in the theater room." : "A free account opens the theater room on any device."}</p>
+          <p>{mode === "login" ? "Sign in to open your dashboard." : "A free account opens your dashboard on any device."}</p>
         </header>
 
         {error && !error.field && (
@@ -297,7 +297,7 @@ function AuthForm({
         </div>
 
         <button type="submit" className="auth-submit" disabled={busy} aria-busy={busy || undefined}>
-          <span>{busy ? (mode === "login" ? "Checking your ticket…" : "Printing your ticket…") : mode === "login" ? "Enter the room" : "Get my ticket"}</span>
+          <span>{busy ? (mode === "login" ? "Checking your ticket…" : "Printing your ticket…") : mode === "login" ? "Open dashboard" : "Get my ticket"}</span>
           <span className="auth-submit__icon" aria-hidden>
             {busy ? <span className="btn__spinner" /> : <Icon name="arrowRight" size={18} />}
           </span>
