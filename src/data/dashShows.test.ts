@@ -45,12 +45,19 @@ describe("dashboard shows", () => {
     expect(s.slug).toBe("pajama-drive-2026-10-16-261010220005");
   });
 
-  it("falls back to the same title on the same day, then to the listing's own art", () => {
+  it("falls back to the same title on the same day, and never uses the IDN Plus image", () => {
     const [byTitle] = toDashShows([stage({})], [scheduled({ startsAt: "2026-10-16T14:00:00+07:00" })]);
     expect(byTitle.bannerUrl).toBe("/media/banner.jpg");
+    expect(byTitle.posterUrl).toBeUndefined();
     const [alone] = toDashShows([stage({})], []);
-    expect(alone.bannerUrl).toBe("https://img.example/poster.webp");
+    expect(alone.bannerUrl).toBeUndefined();
+    expect(alone.posterUrl).toBeUndefined();
     expect(alone.team).toBe("JKT48");
+  });
+
+  it("prefers the banner the server attached", () => {
+    const [s] = toDashShows([stage({ banner: "/media/api/img/i/server-banner.jpg" })], [scheduled({})]);
+    expect(s.bannerUrl).toBe("/media/api/img/i/server-banner.jpg");
   });
 
   it("leaves out ended shows and keeps the live flag", () => {
