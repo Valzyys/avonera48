@@ -45,14 +45,14 @@ export function Avatar({ member, size = 32, className }: { member: Member; size?
 }
 
 /**
- * Theater artwork. The source's "poster" and "banner" come in different
- * shapes (and are not always the shape their name suggests), so once an
- * image loads we compare its shape with the slot: if the other image fits
- * the slot better we switch to it, and the one we keep fills the slot. Only
- * when neither fits is the whole image shown over a blurred copy of itself.
+ * Theater artwork. Each slot asks for one image: the theater list uses the
+ * banner, the home page and footer use the poster. The other one is only a
+ * stand-in when the requested image is missing or fails to load. If the
+ * image's shape is far from the slot's, it is shown whole over a blurred
+ * copy of itself instead of being cropped.
  */
-export function ShowArt({ show, className, banner }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; banner?: boolean }) {
-  const first = banner ? show.bannerUrl ?? show.posterUrl : show.posterUrl ?? show.bannerUrl;
+export function ShowArt({ show, className, use = "poster" }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; use?: "poster" | "banner" }) {
+  const first = use === "banner" ? show.bannerUrl ?? show.posterUrl : show.posterUrl ?? show.bannerUrl;
   const other = first === show.posterUrl ? show.bannerUrl : show.posterUrl;
   const [src, setSrc] = useState(first);
   const [fit, setFit] = useState<"cover" | "contain">("cover");
@@ -63,11 +63,6 @@ export function ShowArt({ show, className, banner }: { show: Pick<TheaterShow, "
     const slot = img.parentElement?.getBoundingClientRect();
     if (!slot || !slot.height || !img.naturalHeight) return;
     const mismatch = Math.abs(Math.log(img.naturalWidth / img.naturalHeight / (slot.width / slot.height)));
-    if (mismatch > Math.log(1.45) && other && !tried.current) {
-      tried.current = true;
-      setSrc(other);
-      return;
-    }
     setFit(mismatch > Math.log(1.45) ? "contain" : "cover");
   };
 

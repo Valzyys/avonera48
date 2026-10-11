@@ -1591,6 +1591,11 @@
 .show-row__art {
   aspect-ratio: 16 / 9;
 }
+.show-row--poster .show-row__art {
+  aspect-ratio: 3 / 4;
+  width: 68px;
+  justify-self: center;
+}
 .news-row__cat,
 .related-members a {
   border-radius: var(--r-full);

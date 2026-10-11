@@ -42,7 +42,7 @@ export default function ShowDetailPage() {
         </div>
         <div className="show-hero">
           <div className="show-hero__art" style={vtShow(slug)}>
-            {show ? <ShowArt show={show} /> : <Skeleton height="100%" />}
+            {show ? <ShowArt show={show} use="poster" /> : <Skeleton height="100%" />}
           </div>
           <div className="show-hero__info" ref={info}>
             {show ? (

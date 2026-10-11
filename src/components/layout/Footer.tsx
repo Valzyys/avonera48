@@ -73,7 +73,7 @@ function NextShow({ show }: { show: ShowSummary }) {
   return (
     <Link to={`/theater/${show.slug}`} viewTransition className="curtain__show" data-rise>
       <span className="curtain__show-art">
-        <ShowArt show={show} />
+        <ShowArt show={show} use="poster" />
       </span>
       <span className="curtain__show-info">
         <span className="curtain__kicker">Next on stage</span>

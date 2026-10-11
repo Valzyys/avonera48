@@ -96,16 +96,16 @@ export function LineupAvatars({ members, max = 6, size = 26 }: { members: Member
 }
 
 /** Schedule row: time · show · lineup · status. */
-export function ShowRow({ show, withDate = false, shareName = true }: { show: ShowSummary; index?: number; withDate?: boolean; shareName?: boolean }) {
+export function ShowRow({ show, withDate = false, shareName = true, art = "banner" }: { show: ShowSummary; index?: number; withDate?: boolean; shareName?: boolean; art?: "poster" | "banner" }) {
   return (
     <li>
-      <Link to={`/theater/${show.slug}`} viewTransition className={cx("show-row", `is-${show.status}`)}>
+      <Link to={`/theater/${show.slug}`} viewTransition className={cx("show-row", `show-row--${art}`, `is-${show.status}`)}>
         <span className="show-row__time">
           {withDate && <span className="show-row__date">{formatDate(show.startsAt, { year: undefined })}</span>}
           <span className="show-row__clock">{formatTime(show.startsAt)}</span>
         </span>
         <span className="show-row__art" style={shareName ? vtShow(show.slug) : undefined}>
-          <ShowArt show={show} banner />
+          <ShowArt show={show} use={art} />
         </span>
         <span className="show-row__main">
           <span className="show-row__title">{show.title}</span>

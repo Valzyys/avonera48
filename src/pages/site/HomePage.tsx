@@ -243,7 +243,7 @@ function NextShow({ show }: { show: ShowSummary }) {
       </span>
       <span className="next-show__show">
         <span className="next-show__art" style={vtShow(show.slug)}>
-          <ShowArt show={show} />
+          <ShowArt show={show} use="poster" />
         </span>
         <span className="next-show__info">
           <span className="h-card">{show.title}</span>
@@ -546,7 +546,7 @@ function Schedule() {
         ) : (
           <ul className="show-list" ref={list}>
             {shows.map((s) => (
-              <ShowRow key={s.slug} show={s} withDate shareName={false} />
+              <ShowRow key={s.slug} show={s} withDate shareName={false} art="poster" />
             ))}
           </ul>
         )}
