@@ -1,6 +1,6 @@
 import type { ApiRecent, ApiRecentDetail } from "./types";
 
-const I = (id: string, ext = "webp") => `https://jkt48connect.com/api/img/i/${id}.${ext}`;
+const I = (id: string, ext = "webp") => `/media/api/img/i/${id}.${ext}`;
 
 /** Snapshot of GET /api/v1/recent (cached_at 2026-10-11T05:01:37Z). */
 export const recentResponse: ApiRecent[] = [
@@ -16,7 +16,7 @@ export const recentResponse: ApiRecent[] = [
   { _id: "hi-261009231836", type: "idn", total_gift: "Rp 4.557.500", points: 1823, member: { name: "Michie JKT48", nickname: "Michie JKT48", url: "michie", img: I("h4hsxz3gmqpogpmme2vwq33utbji2eww6gh4bzvkuvucd24253f6zaniaunc3lseahvhwoylzquxhyilkrilekmepceiyhwtxrydbx2bkhcicaiq4geyjokl2bbq") }, idn: { title: "hi", image: I("3ezdvr7424qb2lv5rsv6phkmm7fbvxmvwnmaie3cwhm75ooktd3k5vuxabmvxu7bcxk3yasg5fwvx6dbpzjb5es62qo6oyy2hkwq3qrtqfj3ur2xpahf73a7gyga") }, live_info: { duration: 4808936, viewers: { num: 6621 }, date: { start: "2026-10-09T16:18:43.000Z", end: "2026-10-09T17:38:51.936Z" } } },
 ];
 
-const R = (hash: string) => `https://jkt48connect.com/img/recent/${hash}`;
+const R = (hash: string) => `/media/img/recent/${hash}`;
 const G = (name: string, hash: string, count: number, total_gold: number, total_points = 0) => ({ name, image_url: R(`${hash}.png`), count, total_gold, total_points });
 const T = (name: string, avatar: string, total_gold: number, count: number, total_points = 0) => ({ name, avatar: R(avatar), total_gold, count, total_points });
 
@@ -43,7 +43,7 @@ export const recentDetailResponse: ApiRecentDetail[] = [
     gifts_summary: [G("mirror ball(anime)", "3627720f99ee17e8344f98ee", 43, 21500), G("Special Rainbow (anime)", "111273159734959c6e96129b", 6, 6000), G("Aurora(anime)", "7a2133a824a89f07a75e2a32", 2, 2000), G("Coffee beans(anime)", "1405e02734cace39254c0ef5", 170, 1700), G("Kucing Unyu", "db0bad20ef4c60679475aba0", 1, 1000), G("RainbowStar", "6749a217abccd8ebc70a91f8", 75, 0, 7500)],
     top_senders: [T("Akbar Tawakal", "a9ea606b5f0ac1c3d62354dd.png", 9500, 20, 1), T("Julian", "110ebfdc529e7b66535a0ef3.png", 5021, 29, 1300), T("tokki", "81821732911cbc956226ce9a.png", 5000, 10), T("Ridho_25", "03b68406675c8aa9f180a19d.png", 3032, 8), T("ahay_adam", "e93b79d77922a08232555ee7.png", 2000, 2)],
   },
-  { id: "showroom:510000:1791386946000", name: "Erine", title: "JKT48_Erine", image: "https://jkt48connect.com/img/recent/35d66d69b76f0e8903e0e49f.jpeg", type: "showroom", start_time: 1791386946000, end_time: 1791392020428, max_viewers: 10567, comment_count: 8444, gift_count: 2791, total_gold: 35725, total_points: 35010, youtube_url: "https://youtu.be/DozC39W3fLI" },
-  { id: "diroriiiii-260930231403", name: "Erine", title: "diroriiiii", image: "https://jkt48connect.com/img/recent/8e843bfcd094db20bc824e96.webp", type: "idn", start_time: 1790784850000, end_time: 1790790905969, max_viewers: 10778, comment_count: 9638, gift_count: 142, total_gold: 3825, total_points: 0, youtube_url: "https://youtu.be/sHEs3EAZpYE" },
-  { id: "diroriiiii-260929225835", name: "Erine", title: "diroriiiii", image: "https://jkt48connect.com/img/recent/197981374041be3887ae63f9.webp", type: "idn", start_time: 1790697521000, end_time: 1790703194856, max_viewers: 15366, comment_count: 12343, gift_count: 88, total_gold: 8477, total_points: 0, youtube_url: "https://youtu.be/tkpvxjjSWpQ" },
+  { id: "showroom:510000:1791386946000", name: "Erine", title: "JKT48_Erine", image: "/media/img/recent/35d66d69b76f0e8903e0e49f.jpeg", type: "showroom", start_time: 1791386946000, end_time: 1791392020428, max_viewers: 10567, comment_count: 8444, gift_count: 2791, total_gold: 35725, total_points: 35010, youtube_url: "https://youtu.be/DozC39W3fLI" },
+  { id: "diroriiiii-260930231403", name: "Erine", title: "diroriiiii", image: "/media/img/recent/8e843bfcd094db20bc824e96.webp", type: "idn", start_time: 1790784850000, end_time: 1790790905969, max_viewers: 10778, comment_count: 9638, gift_count: 142, total_gold: 3825, total_points: 0, youtube_url: "https://youtu.be/sHEs3EAZpYE" },
+  { id: "diroriiiii-260929225835", name: "Erine", title: "diroriiiii", image: "/media/img/recent/197981374041be3887ae63f9.webp", type: "idn", start_time: 1790697521000, end_time: 1790703194856, max_viewers: 15366, comment_count: 12343, gift_count: 88, total_gold: 8477, total_points: 0, youtube_url: "https://youtu.be/tkpvxjjSWpQ" },
 ];

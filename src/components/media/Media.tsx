@@ -5,7 +5,7 @@ import { retryOrigin } from "@/utils/media";
 import { teamColor } from "@/utils/team";
 
 /*
- * Media slots. Images come from the source (proxied by jkt48connect.com).
+ * Media slots. Images come from the source through the site's /media proxy.
  * If one is missing or fails to load, a quiet tinted tile with initials
  * takes its place — never an imitation photo.
  */
@@ -46,49 +46,46 @@ export function Avatar({ member, size = 32, className }: { member: Member; size?
 
 /**
  * Theater artwork. Each slot asks for one image: the theater list uses the
- * banner, the home page and footer use the poster. The other one is only a
- * stand-in when the requested image is missing or fails to load. If the
- * image's shape is far from the slot's, it is shown whole over a blurred
- * copy of itself instead of being cropped.
+ * banner, the home page, footer and show page use the poster. The other one
+ * is only a stand-in when the requested image is missing or fails to load.
+ * The source's images come in any shape (a "poster" can be wide, a "banner"
+ * tall), so once the image loads the slot takes the image's own proportions:
+ * it is never cropped and never letterboxed.
  */
 export function ShowArt({ show, className, use = "poster" }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; use?: "poster" | "banner" }) {
   const first = use === "banner" ? show.bannerUrl ?? show.posterUrl : show.posterUrl ?? show.bannerUrl;
   const other = first === show.posterUrl ? show.bannerUrl : show.posterUrl;
   const [src, setSrc] = useState(first);
-  const [fit, setFit] = useState<"cover" | "contain">("cover");
+  const [ratio, setRatio] = useState<number>();
   const [failed, setFailed] = useState(false);
   const tried = useRef(false);
 
-  const onLoad = (img: HTMLImageElement) => {
-    const slot = img.parentElement?.getBoundingClientRect();
-    if (!slot || !slot.height || !img.naturalHeight) return;
-    const mismatch = Math.abs(Math.log(img.naturalWidth / img.naturalHeight / (slot.width / slot.height)));
-    setFit(mismatch > Math.log(1.45) ? "contain" : "cover");
-  };
-
   return (
-    <span className={cx("media sa", `sa--${fit}`, className)} style={{ ["--oshi" as string]: teamColor(show.team) } as CSSProperties}>
+    <span
+      className={cx("media sa", !!ratio && "sa--sized", className)}
+      style={{ ["--oshi" as string]: teamColor(show.team), ...(ratio ? { ["--ar" as string]: ratio.toFixed(4) } : {}) } as CSSProperties}
+    >
       {src && !failed ? (
-        <>
-          {fit === "contain" && <img className="sa__bg" src={src} alt="" aria-hidden decoding="async" referrerPolicy="no-referrer" />}
-          <img
-            className="sa__img"
-            src={src}
-            alt={`${show.title} poster`}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onLoad={(e) => onLoad(e.currentTarget)}
-            onError={(e) =>
-              retryOrigin(e.currentTarget, () => {
-                if (other && !tried.current) {
-                  tried.current = true;
-                  setSrc(other);
-                } else setFailed(true);
-              })
-            }
-          />
-        </>
+        <img
+          className="sa__img"
+          src={src}
+          alt={`${show.title} poster`}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onLoad={(e) => {
+            const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+            if (w && h) setRatio(Math.min(3, Math.max(0.5, w / h)));
+          }}
+          onError={(e) =>
+            retryOrigin(e.currentTarget, () => {
+              if (other && !tried.current) {
+                tried.current = true;
+                setSrc(other);
+              } else setFailed(true);
+            })
+          }
+        />
       ) : (
         <span className="sa__fallback" role="img" aria-label={`${show.title} (no poster)`}>
           <span className="sa__kicker">Theater</span>

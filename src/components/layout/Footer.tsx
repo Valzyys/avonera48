@@ -239,7 +239,7 @@ export function Footer() {
 
         <div className="container curtain__base">
           <span>© {new Date().getFullYear()} Avonera48 · an unofficial fan site, not affiliated with JKT48 or its management</span>
-          <SourceNote live="Data: jkt48connect.com · times in WIB" />
+          <SourceNote live="Live data · times in WIB" />
         </div>
       </div>
     </footer>

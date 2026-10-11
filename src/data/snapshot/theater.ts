@@ -1,6 +1,6 @@
 import type { ApiTheater } from "./types";
 
-const I = (id: string) => `https://jkt48connect.com/api/img/i/${id}.jpg`;
+const I = (id: string) => `/media/api/img/i/${id}.jpg`;
 const L = (...rows: [string, string, string][]) => rows.map(([id, name, url_key]) => ({ id, name, url_key }));
 
 /** Snapshot of GET /api/v1/theater?page=1 (cached_at 2026-10-11T05:03:43Z). */

@@ -1,6 +1,6 @@
 /**
  * Domain models for the Avonera48 fan site. The snapshot adapter (sample
- * responses from the jkt48connect.com API) and any future live adapter
+ * responses from the upstream data API) and any future live adapter
  * both return these shapes.
  */
 

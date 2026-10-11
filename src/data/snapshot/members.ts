@@ -1,6 +1,6 @@
 import type { ApiMember } from "./types";
 
-/** Snapshot of GET /api/v1/members (jkt48connect.com), trimmed to the fields the site uses. */
+/** Snapshot of GET /api/v1/members, trimmed to the fields the site uses. */
 const S = (handle: string, x?: string, ig?: string, tt?: string, idn?: string) => {
   const out: { title: string; url: string }[] = [];
   if (x) out.push({ title: "X", url: x });
@@ -10,7 +10,7 @@ const S = (handle: string, x?: string, ig?: string, tt?: string, idn?: string) =
   if (idn) out.push({ title: "IDN", url: `https://www.idn.app/${idn}` });
   return out;
 };
-const IMG = (id: string) => `https://jkt48connect.com/api/img/i/${id}.jpg`;
+const IMG = (id: string) => `/media/api/img/i/${id}.jpg`;
 
 export const membersResponse: ApiMember[] = [
   { name: "Abigail Rachel", url_key: "aralie", nicknames: ["Aralie"], team: "PASSION", generation: "gen12-jkt48", jkt48_id: "1", room_id: 408457, idn_username: "jkt48_aralie", img: IMG("cjjofelim3bhc32c2dh7dg4jtbxnb4yektjobzs4h5vvnqogbjvp67ke5o3abimduwb23eux6i2lpprp5ceqys67gj7iaj3tcxuekesbxbojeuhog4rkdv4naco5ynrr"), socials: S("JKT48_Aralie", "https://twitter.com/Aralie_JKT48", "https://www.instagram.com/jkt48.aralie/", "https://www.tiktok.com/@jkt48.aralie/", "jkt48_aralie") },

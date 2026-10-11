@@ -3,19 +3,28 @@
  * Pages Functions (functions/), so /api and /media work on either platform.
  *
  *   - /api/health — status, including whether the data API key is set.
- *   - /api/v1/…   — a read-only proxy to the jkt48connect.com API. The key
- *     lives in the JKT48CONNECT_API_KEY secret and never reaches the browser.
- *     Responses are cached at the edge for a short, per-endpoint time.
+ *   - /api/v1/…   — a read-only proxy to the upstream data API. The key
+ *     lives in a secret and never reaches the browser. Upstream image URLs
+ *     in the responses are rewritten to this site's /media proxy, so the
+ *     browser only ever talks to this origin. Responses are cached at the
+ *     edge for a short, per-endpoint time.
  */
 
 export interface Env {
   ASSETS?: Fetcher;
   APP_ENV?: string;
-  /** Set with `wrangler secret put JKT48CONNECT_API_KEY`. */
+  /** Upstream API key: `wrangler secret put DATA_API_KEY`. */
+  DATA_API_KEY?: string;
+  /** Older name for DATA_API_KEY, still honoured. */
   JKT48CONNECT_API_KEY?: string;
 }
 
 const UPSTREAM = "https://jkt48connect.com";
+const apiKey = (env: Env) => env.DATA_API_KEY || env.JKT48CONNECT_API_KEY;
+
+/** Upstream image URLs (plain or JSON-escaped) → /media/… on this origin. */
+const UPSTREAM_IMG = /https?:\\?\/\\?\/(?:www\.)?jkt48connect\.com\\?\/((?:api\\?\/)?img\\?\/)/gi;
+const rewriteImages = (body: string) => body.replace(UPSTREAM_IMG, "/media/$1");
 
 /** Allowed upstream paths and their edge cache time (seconds). */
 const ROUTES: { pattern: RegExp; ttl: number }[] = [
@@ -44,24 +53,26 @@ function json(body: unknown, status = 200, extra: Record<string, string> = {}): 
 async function proxy(request: Request, env: Env, ctx: ExecutionContext, url: URL): Promise<Response> {
   const route = ROUTES.find((r) => r.pattern.test(url.pathname));
   if (!route) return json({ ok: false, error: "not_found" }, 404);
-  if (!env.JKT48CONNECT_API_KEY) return json({ ok: false, error: "not_configured", message: "JKT48CONNECT_API_KEY is not set." }, 503);
+  const key = apiKey(env);
+  if (!key) return json({ ok: false, error: "not_configured", message: "DATA_API_KEY is not set." }, 503);
 
   const upstream = new URL(url.pathname, UPSTREAM);
   for (const [k, v] of url.searchParams) if (PASS_PARAMS.has(k) && v.length <= 100) upstream.searchParams.set(k, v);
 
-  // Edge cache keyed on the upstream URL (the key itself is not part of it).
+  // Edge cache keyed on the upstream URL (the key itself is not part of it);
+  // `_r` versions the rewritten body.
   const cache = caches.default;
-  const cacheKey = new Request(upstream.toString(), { method: "GET" });
+  const cacheKey = new Request(`${upstream.toString()}${upstream.search ? "&" : "?"}_r=2`, { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
   let res: Response;
   try {
-    res = await fetch(upstream.toString(), { headers: { "x-api-key": env.JKT48CONNECT_API_KEY, accept: "application/json" } });
+    res = await fetch(upstream.toString(), { headers: { "x-api-key": key, accept: "application/json" } });
   } catch {
     return json({ ok: false, error: "upstream_unreachable" }, 502);
   }
-  const body = await res.text();
+  const body = rewriteImages(await res.text());
   if (!res.ok) {
     // Pass the upstream status through, without its headers.
     return new Response(body, { status: res.status, headers: { ...JSON_HEADERS, "cache-control": "no-store" } });
@@ -72,8 +83,8 @@ async function proxy(request: Request, env: Env, ctx: ExecutionContext, url: URL
 }
 
 /**
- * Image proxy: /media/<path> → https://jkt48connect.com/<path> for the API's
- * image paths only. Images there are content-addressed, so they are cached
+ * Image proxy: /media/<path> → the upstream's <path>, for its image paths
+ * only. Images there are content-addressed, so they are cached
  * at the edge and in browsers for a year.
  */
 async function media(request: Request, ctx: ExecutionContext, url: URL): Promise<Response> {
@@ -127,7 +138,7 @@ export async function handle(request: Request, env: Env, ctx: Ctx): Promise<Resp
   if (request.method !== "GET" && request.method !== "HEAD") return json({ ok: false, error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
 
   if (url.pathname === "/api/health") {
-    return json({ service: "avonera48", status: "ok", environment: env.APP_ENV ?? "pages", dataSource: env.JKT48CONNECT_API_KEY ? "jkt48connect" : "not_configured" });
+    return json({ service: "avonera48", status: "ok", environment: env.APP_ENV ?? "pages", dataSource: apiKey(env) ? "live" : "not_configured" });
   }
   if (url.pathname.startsWith("/api/v1/")) return proxy(request, env, ctx as ExecutionContext, url);
   return json({ ok: false, error: "not_found" }, 404);

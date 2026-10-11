@@ -1,5 +1,5 @@
 /*
- * Shapes of the jkt48connect.com API v1 responses, reduced to the fields
+ * Shapes of the upstream API v1 responses, reduced to the fields
  * the site reads. The snapshot files hold real responses in these shapes;
  * a live adapter (through the Worker, with the key kept server-side) can
  * return the same objects later.

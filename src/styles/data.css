@@ -50,17 +50,17 @@
   width: 100%;
   height: 100%;
 }
-.sa__bg {
-  object-fit: cover;
-  filter: blur(18px) saturate(1.3) brightness(0.8);
-  transform: scale(1.25);
-}
 .sa__img {
   object-fit: cover;
-  object-position: center 30%;
 }
-.sa--contain .sa__img {
-  object-fit: contain;
+/* Once the image is in, the slot takes its proportions (see ShowArt). */
+.sa--sized {
+  height: auto;
+  aspect-ratio: var(--ar);
+}
+:is(.next-show__art, .curtain__show-art, .show-hero__art):has(> .sa--sized) {
+  aspect-ratio: auto;
+  height: auto;
 }
 .sa__fallback {
   display: flex;
@@ -223,7 +223,7 @@
 }
 .show-row {
   display: grid;
-  grid-template-columns: 112px 92px minmax(0, 1fr) auto auto;
+  grid-template-columns: 112px 136px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--s-5);
   padding: var(--s-4) 0;
@@ -1588,13 +1588,24 @@
   margin-inline: calc(var(--s-3) * -1);
   border-radius: var(--r-md);
 }
+/* Fixed height, width from the image: wide art and tall art both fit whole. */
 .show-row__art {
-  aspect-ratio: 16 / 9;
-}
-.show-row--poster .show-row__art {
-  aspect-ratio: 3 / 4;
-  width: 68px;
+  display: flex;
   justify-self: center;
+  width: auto;
+  max-width: 100%;
+  height: 72px;
+  aspect-ratio: auto;
+}
+.show-row__art .sa {
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  aspect-ratio: var(--ar, 16 / 9);
+}
+.show-row--poster .show-row__art .sa {
+  aspect-ratio: var(--ar, 3 / 4);
 }
 .news-row__cat,
 .related-members a {
