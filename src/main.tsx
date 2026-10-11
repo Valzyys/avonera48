@@ -10,6 +10,7 @@ import "./styles/base.css";
 import "./styles/ui.css";
 import "./styles/site.css";
 import "./styles/data.css";
+import "./styles/account.css";
 import { App } from "./App";
 
 createRoot(document.getElementById("root")!).render(

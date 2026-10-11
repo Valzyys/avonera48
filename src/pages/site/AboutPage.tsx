@@ -105,7 +105,10 @@ export default function AboutPage() {
                 Following JKT48 means keeping several places open at once: two streaming platforms, the theater schedule, member profiles and official announcements.
                 Avonera48 brings them together on one page that is quick to read on a phone.
               </p>
-              <p>It is a reader’s tool. It does not host streams, sell tickets or publish content of its own.</p>
+              <p>
+                With a free account, members can also open the theater room, where shows are played through a licensed partner service. Avonera48 does not sell
+                tickets or publish content of its own.
+              </p>
             </Section>
 
             <Section n={2} id="independence" title="Independence">
@@ -156,7 +159,12 @@ export default function AboutPage() {
             </Section>
 
             <Section n={6} id="privacy" title="Privacy">
-              <p>There are no accounts, no advertising and no analytics or tracking cookies.</p>
+              <p>There is no advertising and there are no analytics or tracking cookies.</p>
+              <p>
+                An account stores your name, your email and a salted hash of your password; your password itself is never stored. Signing in sets a single session cookie
+                that keeps you signed in for 30 days. When you open the theater room, the partner service receives an anonymous account ID so a reload doesn’t count as a
+                new viewer.
+              </p>
               <p>Your theme choice is stored in your own browser and never leaves your device.</p>
             </Section>
           </div>

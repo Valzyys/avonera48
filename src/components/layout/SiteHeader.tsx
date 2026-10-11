@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { Avatar } from "@/components/media/Media";
+import { Icon } from "@/components/ui";
+import { useAuth } from "@/features/auth/AuthContext";
 import { useResource } from "@/hooks/useResource";
 import { gsap, useGSAP } from "@/motion/gsap";
 import { api } from "@/services";
@@ -16,7 +18,7 @@ export const primaryNav = [
   { to: "/news", label: "News" },
 ];
 
-const menuNav = [{ to: "/", label: "Home" }, ...primaryNav.map((n) => (n.label === "Recent" ? { ...n, label: "Recent live" } : n)), { to: "/about", label: "About" }];
+const menuNav = [{ to: "/", label: "Home" }, ...primaryNav.map((n) => (n.label === "Recent" ? { ...n, label: "Recent live" } : n)), { to: "/about", label: "About" }, { to: "/dashboard", label: "Theater room" }];
 
 /**
  * Floating capsule header. A soft "blob" slides under whichever link the
@@ -123,6 +125,7 @@ export function SiteHeader() {
               <span className="live-chip__word">live</span>
             </Link>
           )}
+          <AccountButton />
           <ThemeToggle />
           <button type="button" className={cx("menu-btn", open && "is-open")} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="site-menu" aria-label={open ? "Close menu" : "Open menu"}>
             <span />
@@ -211,5 +214,27 @@ function MobileMenu({ open, onClose, liveCount }: { open: boolean; onClose: () =
         </div>
       </div>
     </div>
+  );
+}
+
+/** Sign-in pill, or the signed-in member's initial linking to the theater room. */
+function AccountButton() {
+  const { user } = useAuth();
+  if (user === undefined) return null;
+  if (!user) {
+    return (
+      <Link to="/login" className="account-btn" aria-label="Sign in">
+        <Icon name="user" size={15} />
+        <span className="account-btn__word">Sign in</span>
+      </Link>
+    );
+  }
+  return (
+    <Link to="/dashboard" className="account-btn account-btn--in" aria-label={`Theater room, signed in as ${user.name}`} title={user.name}>
+      <span className="account-btn__avatar" aria-hidden>
+        {user.name[0]?.toUpperCase()}
+      </span>
+      <span className="account-btn__word">Room</span>
+    </Link>
   );
 }

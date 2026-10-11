@@ -3,6 +3,7 @@
  * Pages Functions (functions/), so /api and /media work on either platform.
  *
  *   - /api/health — status, including whether the data API key is set.
+ *   - /api/auth/…, /api/room — accounts and the theater room (worker/auth.ts).
  *   - /api/v1/…   — a read-only proxy to the upstream data API. The key
  *     lives in a secret and never reaches the browser. Upstream image URLs
  *     in the responses are rewritten to this site's /media proxy, so the
@@ -10,7 +11,9 @@
  *     edge for a short, per-endpoint time.
  */
 
-export interface Env {
+import { handleAuth, type AuthEnv } from "./auth";
+
+export interface Env extends AuthEnv {
   ASSETS?: Fetcher;
   APP_ENV?: string;
   /** Upstream API key: `wrangler secret put DATA_API_KEY`. */
@@ -135,10 +138,12 @@ export async function handle(request: Request, env: Env, ctx: Ctx): Promise<Resp
   }
 
   if (!url.pathname.startsWith("/api/")) return null;
+  const auth = await handleAuth(request, env, url);
+  if (auth) return auth;
   if (request.method !== "GET" && request.method !== "HEAD") return json({ ok: false, error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
 
   if (url.pathname === "/api/health") {
-    return json({ service: "avonera48", status: "ok", environment: env.APP_ENV ?? "pages", dataSource: apiKey(env) ? "live" : "not_configured" });
+    return json({ service: "avonera48", status: "ok", environment: env.APP_ENV ?? "pages", dataSource: apiKey(env) ? "live" : "not_configured", accounts: env.AUTH ? "ready" : "not_configured" });
   }
   if (url.pathname.startsWith("/api/v1/")) return proxy(request, env, ctx as ExecutionContext, url);
   return json({ ok: false, error: "not_found" }, 404);
