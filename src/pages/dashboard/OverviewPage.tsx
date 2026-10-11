@@ -5,14 +5,14 @@ import { LineupAvatars } from "@/components/domain/Cards";
 import { ShowArt } from "@/components/media/Media";
 import { Icon, Skeleton } from "@/components/ui";
 import { rupiah, shop } from "@/features/members/api";
-import { formatCountdown, useClock } from "@/hooks/useClock";
+import { useClock } from "@/hooks/useClock";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { DashHead, useDash } from "@/layouts/DashboardLayout";
 import { enter, useGSAP } from "@/motion/gsap";
 import { teamLabel } from "@/utils/team";
 import { formatDate } from "@/utils/format";
-import { ShowAction, showWhen, StatusChip } from "./parts";
+import { Countdown, ShowAction, showWhen, StatusChip } from "./parts";
 
 const greeting = (now: number) => {
   const h = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Jakarta" }).format(now));
@@ -61,7 +61,9 @@ export default function OverviewPage() {
                 "Next on stage"
               )}
             </span>
-            <h2 className="ov-hero__title">{next.title}</h2>
+            <h2 className="ov-hero__title">
+              <Link to={`/dashboard/schedule/${next.slug}`}>{next.title}</Link>
+            </h2>
             <p className="ov-hero__meta">
               {showWhen(next)} · {teamLabel(next.team)}
               {live && live.viewers > 0 && ` · ${live.viewers.toLocaleString("id-ID")} watching`}
@@ -125,7 +127,9 @@ export default function OverviewPage() {
                   <span>{formatDate(s.startsAt, { day: undefined, month: "short", year: undefined })}</span>
                 </span>
                 <span className="ov-show__main">
-                  <span className="ov-show__title">{s.title}</span>
+                  <Link to={`/dashboard/schedule/${s.slug}`} className="ov-show__title">
+                    {s.title}
+                  </Link>
                   <span className="meta">{showWhen(s)}</span>
                 </span>
                 <ShowAction show={s} catalog={catalog} now={now} onBuy={setBuy} />
@@ -169,32 +173,6 @@ export default function OverviewPage() {
       </div>
 
       <CheckoutDialog item={buy} onClose={() => (setBuy(null), reloadCatalog())} paymentsReady={!!catalog?.payments} />
-    </div>
-  );
-}
-
-function Countdown({ to, now }: { to: string; now: number }) {
-  const c = formatCountdown(Date.parse(to) - now);
-  return (
-    <div className="countdown" role="timer" aria-label="Time until the show">
-      {c.d > 0 && (
-        <span>
-          <b className="num">{c.d}</b>
-          <small>days</small>
-        </span>
-      )}
-      <span>
-        <b className="num">{c.h}</b>
-        <small>hrs</small>
-      </span>
-      <span>
-        <b className="num">{c.m}</b>
-        <small>min</small>
-      </span>
-      <span>
-        <b className="num">{c.s}</b>
-        <small>sec</small>
-      </span>
     </div>
   );
 }

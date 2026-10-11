@@ -10,6 +10,9 @@
  *   POST /api/admin/products         { show_slug, price, on_sale, stream_slug }   DELETE /api/admin/products/:slug
  *   GET  /api/admin/vouchers         POST /api/admin/vouchers         DELETE /api/admin/vouchers/:code
  *   GET  /api/admin/members          POST /api/admin/members          { email, plan_id, days }
+ *   PATCH /api/admin/members/:uid    { add_days } or { until: "YYYY-MM-DD" }   DELETE /api/admin/members/:uid (revoke)
+ *   GET  /api/admin/users?email=     one account: membership and tickets
+ *   DELETE /api/admin/tickets/:uid/:show   revoke a ticket
  */
 
 import { ensureSchema, getSetting, setSetting } from "./db";
@@ -249,6 +252,50 @@ export async function handleAdmin(request: Request, env: ShopEnv, kv: KVNamespac
     if (days == null) return fail(400, "invalid", "Choose a plan or enter the number of days.", "days");
     const expires = await extendMembership(db, user.id, plan?.id ?? "manual", plan?.name ?? "Membership", days);
     return reply({ ok: true, expires_at: expires });
+  }
+
+  // One member: change how long the pass runs, or take it away.
+  m = /^\/members\/([A-Za-z0-9_-]{6,64})$/.exec(path);
+  if (m && method === "PATCH") {
+    const current = await db.prepare("SELECT * FROM memberships WHERE user_id = ?").bind(m[1]).first<{ expires_at: string; started_at: string }>();
+    if (!current) return fail(404, "not_found", "That account has no membership. Give one instead.");
+    const d = await body(request);
+    let expires: number;
+    if (typeof d.until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.until)) {
+      expires = Date.parse(`${d.until}T23:59:59+07:00`);
+    } else {
+      const add = int(d.add_days, -3650, 3650);
+      if (add == null || add === 0) return fail(400, "invalid", "Enter the number of days to add or remove, or an end date.", "add_days");
+      expires = Math.max(Date.now(), Date.parse(current.expires_at)) + add * 86400000;
+    }
+    if (Number.isNaN(expires)) return fail(400, "invalid", "That date isn’t valid.", "until");
+    const iso = new Date(expires).toISOString();
+    await db.prepare("UPDATE memberships SET expires_at = ? WHERE user_id = ?").bind(iso, m[1]).run();
+    return reply({ ok: true, expires_at: iso });
+  }
+  if (m && method === "DELETE") {
+    await db.prepare("DELETE FROM memberships WHERE user_id = ?").bind(m[1]).run();
+    return reply({ ok: true });
+  }
+
+  if (method === "GET" && path === "/users") {
+    const email = (url.searchParams.get("email") ?? "").trim().toLowerCase().slice(0, 254);
+    const user = email ? await kv.get<{ id: string; name: string; email: string; createdAt?: string }>(`user:${email}`, "json") : null;
+    if (!user) return fail(404, "not_found", "No account uses that email.", "email");
+    const [membership, tickets] = await Promise.all([
+      db.prepare("SELECT plan_id, plan_name, started_at, expires_at FROM memberships WHERE user_id = ?").bind(user.id).first(),
+      db
+        .prepare("SELECT t.show_slug, t.order_id, t.created_at, o.item_title AS title FROM tickets t LEFT JOIN orders o ON o.id = t.order_id WHERE t.user_id = ? ORDER BY t.created_at DESC")
+        .bind(user.id)
+        .all(),
+    ]);
+    return reply({ ok: true, user: { id: user.id, name: user.name, email: user.email ?? email, createdAt: user.createdAt ?? null }, membership: membership ?? null, tickets: tickets.results });
+  }
+
+  m = /^\/tickets\/([A-Za-z0-9_-]{6,64})\/([A-Za-z0-9_-]{1,160})$/.exec(path);
+  if (m && method === "DELETE") {
+    await db.prepare("DELETE FROM tickets WHERE user_id = ? AND show_slug = ?").bind(m[1], m[2]).run();
+    return reply({ ok: true });
   }
 
   return fail(404, "not_found", "Not found.");

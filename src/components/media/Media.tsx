@@ -52,8 +52,18 @@ export function Avatar({ member, size = 32, className }: { member: Member; size?
  * tall), so once the image loads the slot takes the image's own proportions:
  * it is never cropped and never letterboxed.
  */
-export function ShowArt({ show, className, use = "poster" }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; use?: "poster" | "banner" }) {
-  const first = use === "banner" ? show.bannerUrl ?? show.posterUrl : show.posterUrl ?? show.bannerUrl;
+type ShowArtProps = { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; use?: "poster" | "banner" };
+
+export function ShowArt(props: ShowArtProps) {
+  const { show, use = "poster" } = props;
+  const first = use === "banner" ? (show.bannerUrl ?? show.posterUrl) : (show.posterUrl ?? show.bannerUrl);
+  // The image a slot asks for can arrive later (e.g. the dashboard learns the
+  // banner after the show list); a new first choice starts the slot afresh.
+  return <ShowArtImage key={first ?? ""} {...props} />;
+}
+
+function ShowArtImage({ show, className, use = "poster" }: ShowArtProps) {
+  const first = use === "banner" ? (show.bannerUrl ?? show.posterUrl) : (show.posterUrl ?? show.bannerUrl);
   const other = first === show.posterUrl ? show.bannerUrl : show.posterUrl;
   const [src, setSrc] = useState(first);
   const [ratio, setRatio] = useState<number>();

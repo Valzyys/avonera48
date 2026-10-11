@@ -216,4 +216,16 @@ export const admin = {
   deleteVoucher: (code: string) => call<{ ok: true }>(`/api/admin/vouchers/${code}`, { method: "DELETE" }),
   members: () => call<{ members: (Membership & { user_id: string; email: string | null; name: string | null })[] }>("/api/admin/members").then((d) => d.members),
   grant: (email: string, plan_id: string, days?: number) => call<{ expires_at: string }>("/api/admin/members", { method: "POST", json: { email, plan_id, days } }),
+  /** Change a pass: add or remove days, or set the last day (YYYY-MM-DD, WIB). */
+  adjust: (uid: string, change: { add_days: number } | { until: string }) =>
+    call<{ expires_at: string }>(`/api/admin/members/${encodeURIComponent(uid)}`, { method: "PATCH", json: change }),
+  revoke: (uid: string) => call<{ ok: true }>(`/api/admin/members/${encodeURIComponent(uid)}`, { method: "DELETE" }),
+  user: (email: string) => call<AdminUser>(`/api/admin/users?email=${encodeURIComponent(email)}`),
+  revokeTicket: (uid: string, show: string) => call<{ ok: true }>(`/api/admin/tickets/${encodeURIComponent(uid)}/${encodeURIComponent(show)}`, { method: "DELETE" }),
 };
+
+export interface AdminUser {
+  user: { id: string; name: string; email: string; createdAt: string | null };
+  membership: Membership | null;
+  tickets: { show_slug: string; order_id: string; created_at: string; title: string | null }[];
+}
