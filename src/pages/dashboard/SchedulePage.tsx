@@ -16,13 +16,14 @@ type Filter = "all" | "mine" | "sale";
 
 export default function SchedulePage() {
   useDocumentTitle("Shows");
-  const { catalog, shows, reloadCatalog } = useDash();
+  const { catalog, shows, showsError, reloadCatalog } = useDash();
   const now = useClock();
   const ref = useRef<HTMLDivElement>(null);
   const [buy, setBuy] = useState<CheckoutItem | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
-  const list = (shows ?? []).filter((s) => (filter === "mine" ? !!accessOf(catalog, s.slug) : filter === "sale" ? !accessOf(catalog, s.slug) && priceOf(catalog, s.slug) != null : true));
+  // The show on air comes first.
+  const list = [...(shows ?? [])].sort((a, b) => Number(b.onAir) - Number(a.onAir)).filter((s) => (filter === "mine" ? !!accessOf(catalog, s.slug) : filter === "sale" ? !accessOf(catalog, s.slug) && priceOf(catalog, s.slug) != null : true));
 
   useGSAP(
     () => {
@@ -55,7 +56,9 @@ export default function SchedulePage() {
         </p>
       )}
 
-      {!shows ? (
+      {!shows && showsError ? (
+        <p className="dash-empty">The show list couldn’t be loaded. It refreshes on its own every minute.</p>
+      ) : !shows ? (
         <div className="sched-grid">
           {[0, 1, 2, 3].map((k) => (
             <Skeleton key={k} height={360} />
@@ -77,6 +80,7 @@ export default function SchedulePage() {
                   {live && (
                     <span className="sched-card__live">
                       <i className="live-dot" aria-hidden /> On stage
+                      {s.viewers > 0 && <span className="sched-card__viewers">· {s.viewers.toLocaleString("id-ID")} watching</span>}
                     </span>
                   )}
                 </div>
@@ -84,8 +88,8 @@ export default function SchedulePage() {
                   <span className="sched-card__team">{teamLabel(s.team)}</span>
                   <h2 className="sched-card__title">{s.title}</h2>
                   <p className="meta">
-                    {formatWeekday(s.startsAt)} · {formatTime(s.startsAt)}–{formatTime(s.endsAt)} WIB
-                    {s.birthdayShow && " · Birthday show"}
+                    {formatWeekday(s.startsAt)} · {formatTime(s.startsAt)} WIB
+                    {s.birthday ? ` · Birthday: ${s.birthday}` : s.birthdayShow && " · Birthday show"}
                   </p>
                   <LineupAvatars members={s.lineupMembers} max={7} size={26} />
                   <div className="sched-card__foot">

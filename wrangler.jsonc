@@ -19,5 +19,19 @@
   },
   "vars": {
     "APP_ENV": "production"
-  }
+  },
+  // Accounts, sessions and profile photos.
+  "kv_namespaces": [
+    {
+      "binding": "AUTH",
+      "id": "941c691dc7b64a8a88dc596fa2c441ce"
+    }
+  ],
+  // Shop, memberships and chat. Tables are created on first use.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "a77ae33d-c841-497c-b24a-b3d9dcbb9a22"
+    }
+  ]
 }

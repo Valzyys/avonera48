@@ -5,9 +5,9 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Icon, type IconName } from "@/components/ui";
 import { useAuth, type Account } from "@/features/auth/AuthContext";
 import { shop, type Catalog } from "@/features/members/api";
+import { toDashShows, type DashShow } from "@/features/members/stage";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
-import type { ShowSummary } from "@/services/types";
 import { cx } from "@/utils/format";
 
 interface DashValue {
@@ -15,7 +15,11 @@ interface DashValue {
   catalog: Catalog | undefined;
   catalogError: Error | null;
   reloadCatalog: () => void;
-  shows: ShowSummary[] | undefined;
+  /** Shows on sale (IDN Plus listing), refreshed every minute; null when the list can't be read. */
+  shows: DashShow[] | undefined;
+  showsError: Error | null;
+  /** The show on air right now, if any. */
+  onAir: DashShow | undefined;
 }
 
 const Ctx = createContext<DashValue | null>(null);
@@ -62,10 +66,27 @@ export function DashboardLayout() {
 function Shell({ user }: { user: Account }) {
   const { pathname } = useLocation();
   const catalog = useResource(() => shop.catalog(), []);
-  const shows = useResource(() => api.listShows("upcoming"), []);
+  const stage = useResource(() => shop.shows(), []);
+  // The site schedule only adds team and lineup; the dashboard works without it.
+  const schedule = useResource(() => api.listShows().catch(() => []), []);
+  const reloadStage = stage.reload;
+  useEffect(() => {
+    const t = window.setInterval(() => document.visibilityState === "visible" && reloadStage(), 60_000);
+    return () => window.clearInterval(t);
+  }, [reloadStage]);
+  const shows = useMemo(() => (stage.data ? toDashShows(stage.data, schedule.data) : undefined), [stage.data, schedule.data]);
+  const onAir = shows?.find((s) => s.onAir);
   const value = useMemo<DashValue>(
-    () => ({ user, catalog: catalog.data, catalogError: catalog.status === "error" ? catalog.error : null, reloadCatalog: catalog.reload, shows: shows.data }),
-    [user, catalog.data, catalog.status, catalog.error, catalog.reload, shows.data],
+    () => ({
+      user,
+      catalog: catalog.data,
+      catalogError: catalog.status === "error" ? catalog.error : null,
+      reloadCatalog: catalog.reload,
+      shows,
+      showsError: stage.status === "error" && !stage.data ? stage.error : null,
+      onAir,
+    }),
+    [user, catalog.data, catalog.status, catalog.error, catalog.reload, shows, stage.status, stage.data, stage.error, onAir],
   );
   const nav = NAV.filter((n) => !n.admin || user.isAdmin);
   const watching = pathname.startsWith("/dashboard/watch/");
@@ -80,19 +101,20 @@ function Shell({ user }: { user: Account }) {
   return (
     <Ctx.Provider value={value}>
       <div className={cx("dash", watching && "dash--watch")}>
-        <aside className="dash-side" aria-label="Members area">
+        <aside className="dash-side" aria-label="Dashboard">
           <Link to="/" className="dash-side__logo" aria-label="Avonera48 home">
             <LogoMark size={30} />
             <span>
               Avonera<span className="muted">48</span>
             </span>
           </Link>
-          <p className="dash-side__label">Members</p>
+          <p className="dash-side__label">Dashboard</p>
           <nav className="dash-nav">
             {nav.map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx("dash-nav__link", isActive && "is-active", n.admin && "dash-nav__link--admin")}>
                 <Icon name={n.icon} size={18} />
                 <span>{n.label}</span>
+                {n.to === "/dashboard/schedule" && onAir && <span className="dash-nav__live">Live</span>}
               </NavLink>
             ))}
           </nav>
@@ -114,6 +136,15 @@ function Shell({ user }: { user: Account }) {
             <Link to="/" className="dash-top__logo" aria-label="Avonera48 home">
               <LogoMark size={28} />
             </Link>
+            {onAir && (
+              <Link to={`/dashboard/watch/${onAir.slug}`} className="dash-onair" aria-label={`On air now: ${onAir.title}`}>
+                <span className="dash-onair__badge">
+                  <i aria-hidden /> Live
+                </span>
+                <span className="dash-onair__title">{onAir.title}</span>
+                <Icon name="arrowRight" size={14} />
+              </Link>
+            )}
             <span className="dash-top__spacer" />
             {user.isAdmin && (
               <Link to="/dashboard/admin" className="dash-top__admin">
@@ -131,12 +162,15 @@ function Shell({ user }: { user: Account }) {
           </main>
         </div>
 
-        <nav className="dash-tabs" aria-label="Members area">
+        <nav className="dash-tabs" aria-label="Dashboard">
           {nav
             .filter((n) => !n.admin)
             .map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx("dash-tabs__link", isActive && "is-active")}>
-                <Icon name={n.icon} size={20} />
+                <span className="dash-tabs__icon">
+                  <Icon name={n.icon} size={20} />
+                  {n.to === "/dashboard/schedule" && onAir && <i className="dash-tabs__dot" aria-label="A show is live" />}
+                </span>
                 <span>{n.label}</span>
               </NavLink>
             ))}
