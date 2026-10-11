@@ -53,6 +53,9 @@ const paths = {
   volume: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11",
   mute: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16 9.5l5 5M21 9.5l-5 5",
   expand: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  shrink: "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5",
+  pause: "M8 5.5v13M16 5.5v13",
+  pip: "M3 5h18v14H3zM12.5 11.5h6v5h-6z",
 } as const;
 
 export type IconName = keyof typeof paths;

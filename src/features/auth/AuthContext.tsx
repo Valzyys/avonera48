@@ -5,6 +5,9 @@ export interface Account {
   name: string;
   email: string;
   createdAt: string;
+  /** Profile photo URL, if one was uploaded. */
+  avatar: string | null;
+  isAdmin: boolean;
 }
 
 /** An error from the auth API, with the form field it is about (if any). */
@@ -24,6 +27,8 @@ interface AuthValue {
   login: (email: string, password: string) => Promise<Account>;
   register: (name: string, email: string, password: string) => Promise<Account>;
   logout: () => Promise<void>;
+  /** Replace the signed-in account after a profile change. */
+  setAccount: (a: Account) => void;
 }
 
 const Ctx = createContext<AuthValue | null>(null);
@@ -74,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, login, register, logout }), [user, login, register, logout]);
+  const value = useMemo(() => ({ user, login, register, logout, setAccount: setUser }), [user, login, register, logout]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

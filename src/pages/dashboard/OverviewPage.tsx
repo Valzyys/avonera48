@@ -1,0 +1,188 @@
+import { useRef, useState } from "react";
+import { Link } from "react-router";
+import { CheckoutDialog, type CheckoutItem } from "@/components/domain/CheckoutDialog";
+import { LineupAvatars } from "@/components/domain/Cards";
+import { ShowArt } from "@/components/media/Media";
+import { Icon, Skeleton } from "@/components/ui";
+import { rupiah, shop } from "@/features/members/api";
+import { formatCountdown, useClock } from "@/hooks/useClock";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useResource } from "@/hooks/useResource";
+import { DashHead, useDash } from "@/layouts/DashboardLayout";
+import { enter, useGSAP } from "@/motion/gsap";
+import { teamLabel } from "@/utils/team";
+import { formatDate } from "@/utils/format";
+import { isOnStage, ShowAction, showWhen, StatusChip } from "./parts";
+
+const greeting = (now: number) => {
+  const h = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Jakarta" }).format(now));
+  return h < 11 ? "Good morning" : h < 15 ? "Good afternoon" : h < 19 ? "Good evening" : "Good night";
+};
+
+export default function OverviewPage() {
+  useDocumentTitle("Members");
+  const { user, catalog, shows, reloadCatalog } = useDash();
+  const now = useClock();
+  const ref = useRef<HTMLDivElement>(null);
+  const orders = useResource(() => shop.orders(), []);
+  const [buy, setBuy] = useState<CheckoutItem | null>(null);
+
+  const list = shows ?? [];
+  const live = list.find((s) => isOnStage(s, now));
+  const next = live ?? list[0];
+  const membership = catalog?.membership;
+  const daysLeft = membership ? Math.max(0, Math.ceil((Date.parse(membership.expires_at) - Date.now()) / 86400000)) : 0;
+  const paid = (orders.data ?? []).filter((o) => o.status === "SUCCESS");
+  const spent = paid.reduce((n, o) => n + o.amount, 0);
+
+  useGSAP(
+    () => {
+      enter(".dash-head > *, .ov-hero, .ov-stat, .ov-panel", { autoAlpha: 0, y: 16, duration: 0.7, stagger: 0.06, clearProps: "transform,opacity,visibility" });
+    },
+    { scope: ref },
+  );
+
+  return (
+    <div className="dash-page" ref={ref}>
+      <DashHead kicker="Members area" title={<>{greeting(now)}, <span className="grad-text">{user.name.split(" ")[0]}</span></>} />
+
+      {next ? (
+        <section className={`ov-hero ${live ? "is-live" : ""}`} aria-label={live ? "On stage now" : "Next show"}>
+          <span className="ov-hero__art">
+            <ShowArt show={next} use="poster" />
+          </span>
+          <div className="ov-hero__body">
+            <span className="ov-hero__kicker">
+              {live ? (
+                <>
+                  <i className="live-dot" aria-hidden /> On stage now
+                </>
+              ) : (
+                "Next on stage"
+              )}
+            </span>
+            <h2 className="ov-hero__title">{next.title}</h2>
+            <p className="ov-hero__meta">
+              {showWhen(next)} · {teamLabel(next.team)}
+            </p>
+            <LineupAvatars members={next.lineupMembers} max={8} size={28} />
+            {!live && <Countdown to={next.startsAt} now={now} />}
+            <div className="ov-hero__cta">
+              <ShowAction show={next} catalog={catalog} now={now} onBuy={setBuy} size="lg" />
+              <Link to="/dashboard/schedule" className="dash-link">
+                All shows <Icon name="arrowRight" size={14} />
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <Skeleton height={260} className="ov-hero" />
+      )}
+
+      <div className="ov-stats">
+        <Link to="/dashboard/membership" className={`ov-stat ${membership ? "is-on" : ""}`}>
+          <span className="ov-stat__label">Membership</span>
+          <span className="ov-stat__value">{membership ? `${daysLeft} days` : "—"}</span>
+          <span className="ov-stat__note">{membership ? `${membership.plan_name} · until ${formatDate(membership.expires_at, { year: undefined })}` : "Watch every show with one pass"}</span>
+        </Link>
+        <Link to="/dashboard/schedule" className="ov-stat">
+          <span className="ov-stat__label">Tickets</span>
+          <span className="ov-stat__value">{catalog ? catalog.tickets.length : "…"}</span>
+          <span className="ov-stat__note">Show tickets you own</span>
+        </Link>
+        <Link to="/dashboard/transactions" className="ov-stat">
+          <span className="ov-stat__label">Spent</span>
+          <span className="ov-stat__value">{orders.data ? rupiah(spent) : "…"}</span>
+          <span className="ov-stat__note">{paid.length} paid order{paid.length === 1 ? "" : "s"}</span>
+        </Link>
+      </div>
+
+      <div className="ov-grid">
+        <section className="ov-panel">
+          <div className="ov-panel__head">
+            <h2>Coming up</h2>
+            <Link to="/dashboard/schedule" className="dash-link">
+              Shows <Icon name="arrowRight" size={14} />
+            </Link>
+          </div>
+          <ul className="ov-shows">
+            {list.slice(live ? 0 : 1, 6).map((s) => (
+              <li key={s.slug} className="ov-show">
+                <span className="ov-show__date">
+                  <span className="num">{formatDate(s.startsAt, { day: "numeric", month: undefined, year: undefined })}</span>
+                  <span>{formatDate(s.startsAt, { day: undefined, month: "short", year: undefined })}</span>
+                </span>
+                <span className="ov-show__main">
+                  <span className="ov-show__title">{s.title}</span>
+                  <span className="meta">{showWhen(s)}</span>
+                </span>
+                <ShowAction show={s} catalog={catalog} now={now} onBuy={setBuy} />
+              </li>
+            ))}
+            {shows && list.length <= 1 && <li className="meta">Nothing else announced yet.</li>}
+          </ul>
+        </section>
+
+        <section className="ov-panel">
+          <div className="ov-panel__head">
+            <h2>Recent transactions</h2>
+            <Link to="/dashboard/transactions" className="dash-link">
+              All <Icon name="arrowRight" size={14} />
+            </Link>
+          </div>
+          {orders.data?.length ? (
+            <ul className="ov-orders">
+              {orders.data.slice(0, 5).map((o) => (
+                <li key={o.id}>
+                  <Link to={`/dashboard/pay/${o.id}`} className="ov-order">
+                    <span className="ov-order__icon" aria-hidden>
+                      <Icon name={o.kind === "membership" ? "bolt" : "ticket"} size={16} />
+                    </span>
+                    <span className="ov-order__main">
+                      <span className="ov-order__title">{o.item_title}</span>
+                      <span className="meta">{formatDate(o.created_at)}</span>
+                    </span>
+                    <span className="ov-order__end">
+                      <span className="ov-order__amount">{rupiah(o.pay_amount ?? o.amount)}</span>
+                      <StatusChip status={o.status} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="meta ov-empty">{orders.data ? "No transactions yet. Your tickets and memberships will show up here." : "Loading…"}</p>
+          )}
+        </section>
+      </div>
+
+      <CheckoutDialog item={buy} onClose={() => (setBuy(null), reloadCatalog())} paymentsReady={!!catalog?.payments} />
+    </div>
+  );
+}
+
+function Countdown({ to, now }: { to: string; now: number }) {
+  const c = formatCountdown(Date.parse(to) - now);
+  return (
+    <div className="countdown" role="timer" aria-label="Time until the show">
+      {c.d > 0 && (
+        <span>
+          <b className="num">{c.d}</b>
+          <small>days</small>
+        </span>
+      )}
+      <span>
+        <b className="num">{c.h}</b>
+        <small>hrs</small>
+      </span>
+      <span>
+        <b className="num">{c.m}</b>
+        <small>min</small>
+      </span>
+      <span>
+        <b className="num">{c.s}</b>
+        <small>sec</small>
+      </span>
+    </div>
+  );
+}

@@ -39,6 +39,36 @@ npx wrangler secret put PARTNER_SERVER_IP   # the server IP registered with the 
 
 The partner checks that signed calls come from the registered IP. Cloudflare Workers and Pages have no fixed outbound IP. If the partner rejects calls with `SIGNATURE_REJECTED`, run the signed calls through a relay that has the registered IP, and point `PARTNER_API_BASE` at that relay.
 
+## Tickets, memberships and payments
+
+Shows are sold. A viewer can watch a show with a ticket for that show or with an active membership. Admins can always watch.
+
+Orders, tickets, memberships, prices, vouchers and the room's chat live in a D1 database bound as `DB`. The tables are created on first use, so there is no migration step. A fresh database starts with these prices, which admins can change at `/dashboard/admin`:
+
+- Rp 5.000 per show.
+- Memberships: Weekly Rp 10.000, Monthly Rp 20.000, Yearly Rp 120.000.
+
+Create the database:
+
+```sh
+npx wrangler d1 create avonera48
+```
+
+Then bind it:
+
+- **Pages:** Settings → Bindings → D1 database, variable name `DB`.
+- **Worker:** add it to `wrangler.jsonc` as `"d1_databases": [{ "binding": "DB", "database_name": "avonera48", "database_id": "<id>" }]`.
+
+Payments go through MYPG (QRIS), in `worker/payment.ts`. The server polls the gateway for the payment status while the pay page is open, so no webhook is needed. Set these as secrets or variables:
+
+| Name | What it is |
+| --- | --- |
+| `MYPG_API_KEY` | MYPG API key (secret) |
+| `ADMIN_EMAILS` | Comma-separated emails of accounts that may use `/dashboard/admin` |
+| `MYPG_API_URL` | Optional. Overrides `https://yobasepay.net/api_my` |
+
+Redeploy after adding bindings or secrets so the functions pick them up.
+
 ## Scripts
 
 - `npm run dev` — Vite dev server (no Worker, so it uses the snapshot)

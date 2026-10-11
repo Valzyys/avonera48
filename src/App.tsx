@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/features/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/features/theme/ThemeContext";
+import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { SiteLayout } from "@/layouts/SiteLayout";
 import { HomePage } from "@/pages/site/HomePage";
 import { RouteError } from "@/pages/site/RouteError";
@@ -18,6 +19,23 @@ const router = createBrowserRouter([
   // Sign-in pages are full screen, outside the site chrome.
   { path: "login", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).LoginPage }) },
   { path: "register", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).RegisterPage }) },
+  // The members' area has its own shell (sidebar / tab bar).
+  {
+    path: "dashboard",
+    element: <DashboardLayout />,
+    errorElement: <RouteError />,
+    children: [
+      { index: true, lazy: page(() => import("@/pages/dashboard/OverviewPage")) },
+      { path: "schedule", lazy: page(() => import("@/pages/dashboard/SchedulePage")) },
+      { path: "membership", lazy: page(() => import("@/pages/dashboard/MembershipPage")) },
+      { path: "transactions", lazy: page(() => import("@/pages/dashboard/TransactionsPage")) },
+      { path: "profile", lazy: page(() => import("@/pages/dashboard/ProfilePage")) },
+      { path: "watch/:slug", lazy: page(() => import("@/pages/dashboard/WatchRoomPage")) },
+      { path: "pay/:id", lazy: page(() => import("@/pages/dashboard/PayPage")) },
+      { path: "admin", lazy: page(() => import("@/pages/dashboard/AdminPage")) },
+      { path: "*", lazy: page(() => import("@/pages/site/NotFoundPage")) },
+    ],
+  },
   {
     element: <SiteLayout />,
     errorElement: <RouteError />,
@@ -34,7 +52,6 @@ const router = createBrowserRouter([
       { path: "news", lazy: page(() => import("@/pages/fan/NewsPage")) },
       { path: "news/:slug", lazy: page(() => import("@/pages/fan/NewsDetailPage")) },
       { path: "about", lazy: page(() => import("@/pages/site/AboutPage")) },
-      { path: "dashboard", lazy: page(() => import("@/pages/account/DashboardPage")) },
       { path: "*", lazy: page(() => import("@/pages/site/NotFoundPage")) },
     ],
   },
