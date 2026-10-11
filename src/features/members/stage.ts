@@ -1,5 +1,6 @@
 import type { ShowSummary } from "@/services/types";
 import type { StageShow } from "./api";
+import { bannerFor } from "./showImages";
 
 /** A show on sale in the dashboard: the listing's facts plus the site schedule's lineup. */
 export interface DashShow extends ShowSummary {
@@ -39,11 +40,10 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
         team: s.team ?? match?.team ?? "JKT48",
         lineup: match?.lineup ?? [],
         lineupMembers: match?.lineupMembers ?? [],
-        // Only the theater schedule's banner is shown in the dashboard: never
-        // the IDN Plus image, and no poster stand-in. Without a banner the
-        // slot shows the title card instead.
+        // Banner only, never the IDN Plus image or a poster: the fixed show
+        // map first, then the theater schedule's banner; else the title card.
         posterUrl: undefined,
-        bannerUrl: s.banner ?? match?.bannerUrl ?? undefined,
+        bannerUrl: bannerFor(s.title) ?? s.banner ?? match?.bannerUrl ?? undefined,
         birthdayShow: !!s.birthday || !!match?.birthdayShow,
         onAir: s.status === "live",
         viewers: s.viewers,

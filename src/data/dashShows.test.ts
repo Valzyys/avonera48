@@ -6,7 +6,7 @@ import type { StageShow } from "../../worker/stage";
 const stage = (over: Partial<StageShow>): StageShow => ({
   slug: "pajama-drive-2026-10-16-261010220005",
   code: "GSEMD3",
-  title: "Pajama Drive",
+  title: "Aitakatta",
   startsAt: "2026-10-16T12:00:00.000Z",
   endsAt: "2026-10-16T15:00:00.000Z",
   status: "scheduled",
@@ -23,7 +23,7 @@ const stage = (over: Partial<StageShow>): StageShow => ({
 const scheduled = (over: Partial<ShowSummary>): ShowSummary => ({
   slug: "sh6b09",
   code: "SH6B09",
-  title: "Pajama Drive",
+  title: "Aitakatta",
   startsAt: "2026-10-16T19:00:00+07:00",
   endsAt: "2026-10-16T21:00:00+07:00",
   status: "upcoming",
@@ -63,5 +63,18 @@ describe("dashboard shows", () => {
   it("leaves out ended shows and keeps the live flag", () => {
     const list = toDashShows([stage({ status: "ended" }), stage({ slug: "live", status: "live", viewers: 296 })]);
     expect(list.map((s) => [s.slug, s.onAir, s.viewers])).toEqual([["live", true, 296]]);
+  });
+});
+
+describe("show banner map", () => {
+  it("uses the mapped banner first, matching titles loosely", async () => {
+    const { bannerFor } = await import("@/features/members/showImages");
+    expect(bannerFor("PASSION 200%")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/y2g3dgukgk8ohxghfxv8lyju.jpg");
+    expect(bannerFor("ITADAKI♥LOVE")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
+    expect(bannerFor("ITADAKI🤍LOVE")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
+    expect(bannerFor("Sambil Menggandeng Erat Tanganku")).toContain("zjdka1gtuuoc5gx9kkco");
+    expect(bannerFor("Unknown Show")).toBeUndefined();
+    const [s] = toDashShows([stage({ title: "Pajama Drive", banner: "/media/api/img/i/x.jpg" })], [scheduled({})]);
+    expect(s.bannerUrl).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/ud3mb6r76obaftx4snzy.jpg");
   });
 });
