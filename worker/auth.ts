@@ -20,6 +20,7 @@
  * State-changing requests must be same-origin JSON.
  */
 
+import { openProxied, roomMedia } from "./roomMedia";
 import { partnerCall, partnerReady, type PartnerEnv, type PartnerSession, type PartnerShow } from "./partner";
 
 export interface AuthEnv extends PartnerEnv {
@@ -204,7 +205,9 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace) {
   const user = await currentUser(request, kv);
   if (!user) return fail(401, "unauthenticated", "Sign in to enter the theater room.");
   if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
-  const slug = str((await body(request)).show_slug, 80);
+  const data = await body(request);
+  const slug = str(data.show_slug, 80);
+  const proxy = data.proxy === true;
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(slug)) return fail(400, "invalid", "Choose a show.");
   if (await limited(kv, "session", request, user.id)) return fail(429, "rate_limited", "Too many tries. Wait a few minutes and enter again.");
   const r = await partnerCall<PartnerSession>(env, "POST", "/api/public/partner/v1/session", { show_slug: slug, viewer_id: user.id, ttl: 120 });
@@ -213,6 +216,12 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace) {
     return fail(status, (r.data.code ?? "upstream_error").toLowerCase(), message);
   }
   const resume = typeof r.data.resume_url === "string" && /^https?:\/\//.test(r.data.resume_url) ? r.data.resume_url : null;
+  if (proxy) {
+    // Proxy mode: open the playback URL here and hand the player same-origin URLs.
+    const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
+    if (!opened) return fail(502, "playback_refused", "The room couldn’t open. Try again in a moment.");
+    return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
+  }
   return reply({ ok: true, playback_url: r.data.playback_url, resume_url: resume, expires_in: r.data.expires_in, max_resolution: r.data.max_resolution ?? null });
 }
 
@@ -228,6 +237,10 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
     return reply({ ok: true, user: user ? publicUser(user) : null });
   }
   if (request.method === "GET" && path === "/api/room") return room(request, env, kv);
+  if ((request.method === "GET" || request.method === "HEAD") && path === "/api/room/media") {
+    if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
+    return roomMedia(request, env, kv, url);
+  }
 
   const actions: Record<string, (r: Request, kv: KVNamespace) => Promise<Response>> = {
     "/api/auth/register": register,

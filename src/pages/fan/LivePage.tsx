@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { LiveTile } from "@/components/domain/Cards";
-import { StreamDialog } from "@/components/domain/StreamDialog";
+import { StreamDialog, useStreamOpener } from "@/components/domain/StreamDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ButtonLink, EmptyState, ErrorState, Field, Select, Skeleton, Tabs } from "@/components/ui";
 import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
-import { api, type LiveItem } from "@/services";
+import { api } from "@/services";
 import type { LivePlatform } from "@/types";
 
 type PlatformFilter = "all" | LivePlatform;
@@ -16,7 +16,7 @@ export default function LivePage() {
   useDocumentTitle("Live now");
   const [platform, setPlatform] = useState<PlatformFilter>("all");
   const [sort, setSort] = useState<Sort>("viewers");
-  const [stream, setStream] = useState<LiveItem | null>(null);
+  const { stream, open: setStream, close: closeStream } = useStreamOpener();
   const res = useResource(() => api.listLiveNow(), []);
 
   const all = res.data ?? [];
@@ -85,7 +85,7 @@ export default function LivePage() {
           </>
         )}
       </div>
-      <StreamDialog stream={stream} onClose={() => setStream(null)} />
+      <StreamDialog stream={stream} onClose={closeStream} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Avatar, Flag, MemberPhoto, PlatformMark, ShowArt, oshi } from "@/components/media/Media";
 import { LineupAvatars, LiveFor, ShowRow, StreamCard, vtShow } from "@/components/domain/Cards";
-import { StreamDialog } from "@/components/domain/StreamDialog";
+import { StreamDialog, useStreamOpener } from "@/components/domain/StreamDialog";
 import { TodayTimeline } from "@/components/domain/TodayTimeline";
 import { ButtonLink, ErrorState, Icon, Skeleton } from "@/components/ui";
 import { formatCountdown, useClock } from "@/hooks/useClock";
@@ -609,7 +609,7 @@ function Roster() {
 
 export function HomePage() {
   useDocumentTitle("");
-  const [stream, setStream] = useState<LiveItem | null>(null);
+  const { stream, open: setStream, close: closeStream } = useStreamOpener();
   const [intro, setIntro] = useState(() => {
     try {
       // Read only here: the key is written when the intro finishes, so a
@@ -640,7 +640,7 @@ export function HomePage() {
       <RecentStreams onOpen={setStream} />
       <Schedule />
       <Roster />
-      <StreamDialog stream={stream} onClose={() => setStream(null)} />
+      <StreamDialog stream={stream} onClose={closeStream} />
     </div>
   );
 }

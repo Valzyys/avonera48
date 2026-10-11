@@ -30,7 +30,41 @@ interface RoomInfo {
 interface Seat {
   slug: string;
   title: string;
-  resume: string;
+  /** "proxy": media through this site; "direct": the browser talks to the partner. */
+  mode: Mode;
+  resume?: string;
+}
+
+type Mode = "proxy" | "direct";
+
+interface SessionJson {
+  ok?: boolean;
+  proxied?: boolean;
+  playlist_url?: string;
+  qualities?: { label: string; playlist_url: string }[];
+  playback_url?: string;
+  resume_url?: string | null;
+  message?: string;
+}
+
+/** Opens a viewer session in the given mode and returns what the player needs. */
+async function openSession(slug: string, mode: Mode): Promise<{ data: Playback; resume?: string }> {
+  const res = await fetch("/api/room/session", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ show_slug: slug, proxy: mode === "proxy" }),
+  });
+  const j = (await res.json().catch(() => ({}))) as SessionJson;
+  const fallback = "The room couldn’t open. Try again in a moment.";
+  if (mode === "proxy") {
+    if (!res.ok || !j.playlist_url) throw new Error(j.message ?? fallback);
+    return { data: { playlistUrl: j.playlist_url, qualities: (j.qualities ?? []).map((q) => ({ label: q.label, url: q.playlist_url })) } };
+  }
+  if (!res.ok || !j.playback_url) throw new Error(j.message ?? fallback);
+  const p = await exchangePlayback(j.playback_url);
+  if (!p) throw new Error(fallback);
+  return { data: p, resume: j.resume_url ?? new URL("/api/partner/resume", j.playback_url).toString() };
 }
 
 async function loadRoom(): Promise<RoomInfo> {
@@ -44,7 +78,7 @@ const seat = {
   get: (): Seat | null => {
     try {
       const v = JSON.parse(sessionStorage.getItem(SEAT) ?? "null") as Seat | null;
-      return v && typeof v.resume === "string" && /^https?:\/\//.test(v.resume) ? v : null;
+      return v && typeof v.slug === "string" && (v.mode === "proxy" || (typeof v.resume === "string" && /^https?:\/\//.test(v.resume))) ? v : null;
     } catch {
       return null;
     }
@@ -91,18 +125,21 @@ function Room({ user }: { user: Account }) {
   const onStage = !!current && new Date(current.startsAt).getTime() <= now && now < new Date(current.endsAt).getTime();
   const info = room.data;
   const openShow = info?.shows.find((s) => s.open);
-  const [playback, setPlayback] = useState<{ data: Playback; title: string; resume: string } | null>(null);
+  const [playback, setPlayback] = useState<{ data: Playback; title: string; slug: string; mode: Mode; resume?: string } | null>(null);
   const [entering, setEntering] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   // After a reload, continue the same viewer session before asking for a new one.
+  // After a reload, continue the same viewer: proxy mode reopens through the
+  // server (same viewer id, so no new view); direct mode resumes first.
   useEffect(() => {
     const was = seat.get();
     if (!was || !info?.configured) return;
     let live = true;
-    resumePlayback(was.resume).then((p) => {
+    const reopen = was.mode === "proxy" ? openSession(was.slug, "proxy").catch(() => null) : resumePlayback(was.resume!).then((p) => (p ? { data: p, resume: was.resume } : null));
+    reopen.then((p) => {
       if (!live) return;
-      if (p) setPlayback({ data: p, title: was.title, resume: was.resume });
+      if (p) setPlayback({ ...p, title: was.title, slug: was.slug, mode: was.mode });
       else seat.set(null);
     });
     return () => {
@@ -110,20 +147,17 @@ function Room({ user }: { user: Account }) {
     };
   }, [info]);
 
-  const enterRoom = async (show: RoomShow) => {
+  const enterRoom = async (show: RoomShow, mode: Mode = "proxy") => {
     setEntering(true);
     setProblem(null);
     try {
-      const res = await fetch("/api/room/session", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ show_slug: show.slug }) });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; playback_url?: string; resume_url?: string | null; message?: string };
-      if (!res.ok || !j.playback_url) throw new Error(j.message ?? "The room couldn’t open. Try again in a moment.");
-      const p = await exchangePlayback(j.playback_url);
-      if (!p) throw new Error("The room couldn’t open. Try again in a moment.");
-      const resume = j.resume_url ?? new URL("/api/partner/resume", j.playback_url).toString();
-      seat.set({ slug: show.slug, title: show.title, resume });
-      setPlayback({ data: p, title: show.title, resume });
+      const p = await openSession(show.slug, mode);
+      seat.set({ slug: show.slug, title: show.title, mode, resume: p.resume });
+      setPlayback({ ...p, title: show.title, slug: show.slug, mode });
     } catch (e) {
+      if (mode === "proxy") return enterRoom(show, "direct");
       setProblem(e instanceof Error ? e.message : String(e));
+      setPlayback(null);
     } finally {
       setEntering(false);
     }
@@ -132,6 +166,20 @@ function Room({ user }: { user: Account }) {
   const leave = useCallback(() => {
     seat.set(null);
     setPlayback(null);
+  }, []);
+
+  // The proxied stream wouldn't load: try the direct route once.
+  const latest = useRef({ playback, enterRoom });
+  latest.current = { playback, enterRoom };
+  const fatal = useCallback(() => {
+    const p = latest.current.playback;
+    setPlayback(null);
+    if (p?.mode === "proxy") {
+      void latest.current.enterRoom({ slug: p.slug, title: p.title, open: true }, "direct");
+      return;
+    }
+    seat.set(null);
+    setProblem("The show isn’t coming through right now. Try entering again in a moment.");
   }, []);
 
   useGSAP(
@@ -176,7 +224,7 @@ function Room({ user }: { user: Account }) {
         <div className="room-grid">
           <section className="room-screen" aria-label="Screen">
             {playback ? (
-              <TheaterPlayer playback={playback.data} resumeUrl={playback.resume} title={playback.title} onEnded={leave} />
+              <TheaterPlayer key={`${playback.slug}-${playback.mode}`} playback={playback.data} resumeUrl={playback.resume} title={playback.title} onEnded={leave} onFatal={fatal} />
             ) : (
               <Curtain
                 show={current}

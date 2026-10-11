@@ -56,8 +56,12 @@ export interface LiveStream {
   endedAt?: ISODate;
   /** Viewer count (peak when available). */
   viewers?: number;
-  /** HLS playback URL, when the source provides one. */
+  /** Where "watch" goes: the IDN app/web link, or null. */
   url: string | null;
+  /** On-site watch page (SHOWROOM lives play here). */
+  watchPath?: string;
+  /** HLS sources for the on-site player, best quality first. */
+  sources?: { label: string; url: string }[];
   /** Archive link (e.g. YouTube), only when the source provides one. */
   replayUrl: string | null;
   thumbnailUrl?: string;

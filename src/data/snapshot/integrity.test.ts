@@ -51,7 +51,9 @@ describe("live adapter", () => {
     const live = out.streams.filter((s) => s.status === "live");
     expect(live).toHaveLength(1);
     expect(live[0].memberSlug).toBe("jesslyn-elly");
-    expect(live[0].url).toContain(".m3u8");
+    // SHOWROOM plays on site: the playlist is a source behind /watch/<member>.
+    expect(live[0].sources?.[0].url).toContain(".m3u8");
+    expect(live[0].watchPath).toBe("/watch/jesslyn-elly");
   });
 
   it("creates a stand-in for a streamer missing from /members", () => {

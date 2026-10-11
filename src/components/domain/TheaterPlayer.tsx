@@ -3,11 +3,14 @@ import type Hls from "hls.js";
 import { Icon } from "@/components/ui";
 import { cx } from "@/utils/format";
 
-/** What the viewer's browser gets after exchanging a one-time playback URL (or resuming). */
+/**
+ * What the player plays: a playlist, optional fixed-quality alternatives, and
+ * (for the partner's theater sessions) a header every media request must carry.
+ */
 export interface Playback {
   playlistUrl: string;
-  headerName: string;
-  headerValue: string;
+  headerName?: string;
+  headerValue?: string;
   qualities: { label: string; url: string }[];
 }
 
@@ -47,15 +50,30 @@ export async function resumePlayback(resumeUrl: string): Promise<Playback | null
 }
 
 /**
- * The theater room's player. Every playlist, key and segment request must
- * carry the session's play header, so playback always goes through hls.js
- * (native HLS can't add headers). When the session is refused (401/403) it
- * resumes — at most three times, at least 5 s apart — and gets a new header.
+ * HLS player for the theater room and SHOWROOM lives. When a play header is
+ * required, every playlist, key and segment request carries it, so playback
+ * goes through hls.js (native HLS can't add headers); a refused session
+ * (401/403) is resumed — at most three times, at least 5 s apart. Without a
+ * header, browsers with native HLS but no MSE (older iOS) play it directly.
  */
-export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playback: Playback; resumeUrl: string; title: string; onEnded?: () => void }) {
+export function TheaterPlayer({
+  playback,
+  resumeUrl,
+  title,
+  onEnded,
+  onFatal,
+}: {
+  playback: Playback;
+  resumeUrl?: string;
+  title: string;
+  onEnded?: () => void;
+  /** The stream can't be loaded at all (e.g. the playlist is refused); the owner may try another route. */
+  onFatal?: () => void;
+}) {
   const wrap = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const key = useRef(playback.headerValue);
+  const header = playback.headerName;
   const [source, setSource] = useState(playback.playlistUrl);
   const [quality, setQuality] = useState("Auto");
   const [menu, setMenu] = useState(false);
@@ -78,34 +96,58 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
     let cancelled = false;
     let tries = 0;
     let lastRenew = 0;
+    let netFails = 0;
+    const giveUp = () => {
+      hls?.destroy();
+      if (onFatal) onFatal();
+      else setState("error");
+    };
     setState("loading");
 
     const start = async (url: string) => {
       const { default: HlsCtor } = await import("hls.js");
       if (cancelled) return;
-      if (!HlsCtor.isSupported()) return setState("error");
+      if (!HlsCtor.isSupported()) {
+        if (!header && el.canPlayType("application/vnd.apple.mpegurl")) {
+          el.src = url;
+          el.addEventListener("loadedmetadata", () => setState("ready"), { once: true });
+          el.play().catch(() => undefined);
+          return;
+        }
+        return setState("error");
+      }
       hls?.destroy();
       const h = new HlsCtor({
         lowLatencyMode: true,
         backBufferLength: 30,
-        xhrSetup: (xhr) => {
-          xhr.withCredentials = true;
-          xhr.setRequestHeader(playback.headerName, key.current); // always the latest header
-        },
+        xhrSetup: header
+          ? (xhr) => {
+              xhr.withCredentials = true;
+              xhr.setRequestHeader(header, key.current!); // always the latest header
+            }
+          : undefined,
       });
       hls = h;
       h.on(HlsCtor.Events.MANIFEST_PARSED, () => {
         setState("ready");
         el.play().catch(() => undefined);
       });
+      h.on(HlsCtor.Events.FRAG_LOADED, () => {
+        netFails = 0;
+      });
       h.on(HlsCtor.Events.ERROR, (_e, d) => {
         const status = (d.response as { code?: number } | undefined)?.code;
         // Only a refused session needs a resume; other errors are the player's to retry.
-        if (status === 401 || status === 403) return void renew();
+        if (resumeUrl && (status === 401 || status === 403)) return void renew();
         if (!d.fatal) return;
-        if (d.type === HlsCtor.ErrorTypes.NETWORK_ERROR) h.startLoad();
-        else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
-        else setState("error");
+        console.warn("[player]", d.type, d.details, status ?? "");
+        if (d.type === HlsCtor.ErrorTypes.NETWORK_ERROR) {
+          // A playlist that can't be fetched at all won't come back by retrying.
+          const manifest = /^manifest/.test(d.details);
+          if (manifest || ++netFails > 3) return giveUp();
+          setTimeout(() => !cancelled && h.startLoad(), 1500);
+        } else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+        else giveUp();
       });
       h.loadSource(url);
       h.attachMedia(el);
@@ -122,7 +164,7 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
       await new Promise((r) => setTimeout(r, wait));
       if (cancelled) return;
       lastRenew = Date.now();
-      const next = await resumePlayback(resumeUrl);
+      const next = await resumePlayback(resumeUrl!);
       if (cancelled) return;
       if (!next) {
         setState("error");
@@ -138,8 +180,12 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
     return () => {
       cancelled = true;
       hls?.destroy();
+      if (!hls) {
+        el.removeAttribute("src");
+        el.load();
+      }
     };
-  }, [source, generation, playback.headerName, resumeUrl, onEnded]);
+  }, [source, generation, header, resumeUrl, onEnded, onFatal]);
 
   useEffect(() => {
     if (video.current) {
@@ -185,7 +231,7 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
       {state === "loading" && <span className="player__spinner" aria-label="Loading" />}
       {state === "error" && (
         <p className="player__message" role="alert">
-          The picture isn’t coming through. Reload the page to enter the room again.
+          {resumeUrl ? "The picture isn’t coming through. Reload the page to enter the room again." : "The picture isn’t coming through. The live may have just ended."}
         </p>
       )}
       <div className="player__bar">
