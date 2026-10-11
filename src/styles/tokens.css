@@ -1,0 +1,137 @@
+/* Avonera48 — design tokens.
+   Modelled on how official idol sites are built: a clean warm-white page,
+   hairline rules, compact uppercase section labels, and colour that comes
+   from the members themselves (each has an oshi/penlight colour, set per
+   element as --oshi). One extra accent is reserved for "live". */
+
+:root {
+  color-scheme: light;
+
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --surface-2: #f3f1ed;
+  --surface-3: #e8e5df;
+
+  /* text — contrast on --bg: 16.5 / 8.6 / 5.4 */
+  --text: #1c1a19;
+  --text-2: #4f4a46;
+  --text-3: #6e6862;
+  --text-4: #aaa39b;
+
+  --live: #e0475b;      /* fills */
+  --live-ink: #c22f45;  /* text, ≥ 5:1 on white */
+  --live-soft: #fde8eb;
+  --link: #1c1a19;
+  --link-soft: #ecebe8;
+  --ok: #1d7a46;
+  --warn: #9a5b00;
+  --danger: #b4232c;
+
+  --line: rgba(28, 26, 25, 0.1);
+  --line-2: rgba(28, 26, 25, 0.18);
+  --line-3: rgba(28, 26, 25, 0.34);
+  --hover: rgba(28, 26, 25, 0.035);
+
+  --header-bg: rgba(251, 250, 248, 0.92);
+  --overlay: rgba(28, 26, 25, 0.45);
+  --btn-bg: #1c1a19;
+  --btn-bg-hover: #3a3532;
+  --btn-fg: #ffffff;
+  --shadow-1: 0 1px 2px rgba(28, 26, 25, 0.05);
+  --shadow-2: 0 10px 30px -12px rgba(28, 26, 25, 0.22);
+  --shadow-3: 0 30px 70px -20px rgba(28, 26, 25, 0.35);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px #1c1a19;
+
+  /* oshi tiles are mixed toward this so bright penlight colours stay calm */
+  --oshi-mix: #ffffff;
+  --oshi-amount: 82%;
+
+  --font-display: "Zen Kaku Gothic New", "Hiragino Sans", "Geist Variable", system-ui, sans-serif;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, Menlo, Consolas, monospace;
+
+  --fs-2xs: 0.6875rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: clamp(1.375rem, 1.2rem + 0.6vw, 1.75rem);
+  --fs-2xl: clamp(1.75rem, 1.3rem + 1.6vw, 2.75rem);
+  --fs-3xl: clamp(2.5rem, 1.4rem + 4.4vw, 5.25rem);
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+  --section: clamp(56px, 36px + 5vw, 120px);
+
+  --r-sm: 3px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-full: 999px;
+
+  /* CSS timing for small UI state changes; choreography lives in GSAP. */
+  --t-fast: 150ms;
+  --t-base: 240ms;
+  --t-slow: 450ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --w: 1240px;
+  --w-prose: 680px;
+  --gutter: clamp(16px, 8px + 2.4vw, 40px);
+  --header-h: 64px;
+
+  --z-header: 200;
+  --z-overlay: 400;
+  --z-toast: 600;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #121110;
+  --surface: #1a1918;
+  --surface-2: #232120;
+  --surface-3: #2e2b29;
+
+  --text: #f3f0eb;
+  --text-2: #c9c2ba;
+  --text-3: #a39b92;
+  --text-4: #615a54;
+
+  --live: #ff5d70;
+  --live-ink: #ff7a8a;
+  --live-soft: #3d1a20;
+  --link: #f3f0eb;
+  --link-soft: #2e2b29;
+  --ok: #5fd08d;
+  --warn: #f0b75a;
+  --danger: #ff7b82;
+
+  --line: rgba(243, 240, 235, 0.09);
+  --line-2: rgba(243, 240, 235, 0.16);
+  --line-3: rgba(243, 240, 235, 0.3);
+  --hover: rgba(243, 240, 235, 0.04);
+
+  --header-bg: rgba(18, 17, 16, 0.9);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --btn-bg: #f3f0eb;
+  --btn-bg-hover: #ffffff;
+  --btn-fg: #121110;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 10px 30px -12px rgba(0, 0, 0, 0.7);
+  --shadow-3: 0 30px 70px -20px rgba(0, 0, 0, 0.8);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px #f3f0eb;
+
+  --oshi-mix: #1a1918;
+  --oshi-amount: 70%;
+}
