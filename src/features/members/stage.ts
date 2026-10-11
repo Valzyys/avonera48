@@ -40,8 +40,8 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
         lineup: match?.lineup ?? [],
         lineupMembers: match?.lineupMembers ?? [],
         // The dashboard shows the schedule's wide banner; the listing's own art is the stand-in.
-        posterUrl: match?.posterUrl ?? s.image ?? undefined,
-        bannerUrl: match?.bannerUrl ?? s.image ?? undefined,
+        posterUrl: s.poster ?? match?.posterUrl ?? s.image ?? undefined,
+        bannerUrl: s.banner ?? match?.bannerUrl ?? s.image ?? undefined,
         birthdayShow: !!s.birthday || !!match?.birthdayShow,
         onAir: s.status === "live",
         viewers: s.viewers,
