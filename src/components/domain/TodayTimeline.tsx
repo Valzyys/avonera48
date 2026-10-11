@@ -7,9 +7,7 @@ import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
 import { cx, formatTime } from "@/utils/format";
 
 const HOUR = 3_600_000;
-const START_H = 6; // window: 06:00 → 24:00 WIB
 const END_H = 24;
-const SWEEP_KEY = "avn.sweep.v1";
 
 interface Props {
   dayStartMs: number; // 00:00 WIB of the day
@@ -23,16 +21,21 @@ interface Props {
 
 /**
  * Today, as a broadcast schedule: one lane per member who streamed today,
- * a theater lane, and a red "now" line. Once per session the GSAP timeline
- * replays the day: the now-line runs in from 06:00 and every bar draws
+ * a theater lane, and a red "now" line. When it scrolls into view a GSAP
+ * timeline replays the day: the now-line runs in from the left edge and every bar draws
  * itself as the line passes its start time.
  */
 export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }: Props) {
+  // Window: from an hour before the first stream (06:00 at the latest, 16:00
+  // at the earliest so a quiet day still reads as a day) to midnight.
+  const first = Math.min(now, ...streams.map((s) => new Date(s.startedAt).getTime()), ...shows.map((s) => new Date(s.startsAt).getTime()));
+  const START_H = Math.max(6, Math.min(16, Math.floor((first - dayStartMs) / HOUR) - 1));
+  const step = END_H - START_H <= 10 ? 1 : 2;
   const from = dayStartMs + START_H * HOUR;
   const span = (END_H - START_H) * HOUR;
   const pos = (t: number) => Math.min(1, Math.max(0, (t - from) / span));
   const nowPos = pos(now);
-  const hours = Array.from({ length: (END_H - START_H) / 2 + 1 }, (_, k) => START_H + k * 2);
+  const hours = Array.from({ length: (END_H - START_H) / step + 1 }, (_, k) => START_H + k * step);
 
   // One lane per member, earliest stream first.
   const lanes = new Map<string, LiveItem[]>();
@@ -42,7 +45,7 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
 
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const D = 1.3; // seconds for the line to travel 06:00 → now
+  const D = 1.3; // seconds for the line to travel to now
 
   useGSAP(
     () => {
@@ -54,15 +57,9 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
         if (sc.scrollWidth <= sc.clientWidth) return;
         sc.scrollTo({ left: Math.max(0, sc.scrollWidth * nowPos - sc.clientWidth * 0.6), behavior: smooth ? "smooth" : "auto" });
       };
-      let seen = false;
-      try {
-        seen = !!sessionStorage.getItem(SWEEP_KEY);
-        sessionStorage.setItem(SWEEP_KEY, "1");
-      } catch {
-        seen = true;
-      }
-      if (seen || reducedMotion()) {
+      if (reducedMotion()) {
         focusNow(false);
+        gsap.from(el.querySelectorAll("[data-start]"), { autoAlpha: 0, duration: 0.5, stagger: 0.03 });
         return;
       }
       const at = (t: number) => (pos(t) / Math.max(nowPos, 0.01)) * D;
@@ -129,7 +126,11 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
                           key={`${s.id}-l`}
                           className={cx("tl__bar-label", s.status === "live" && "is-live")}
                           data-start={start}
-                          style={{ left: `calc(${(left + width) * 100}% + 8px)` }}
+                          style={
+                            left + width > 0.68
+                              ? { right: `calc(${(1 - left) * 100}% + 8px)`, textAlign: "right" }
+                              : { left: `calc(${(left + width) * 100}% + 8px)` }
+                          }
                           aria-hidden
                         >
                           {after}
@@ -179,10 +180,10 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
         </div>
       </div>
       <p className="tl__legend meta">
-        <span className="tl__key tl__key--oshi" /> Member stream, in her colour
+        <span className="tl__key tl__key--oshi" /> Stream, coloured by team
         <span className="tl__key tl__key--live" /> Live now
         <span className="tl__key tl__key--show" /> Theater show
-        <span className="tl__legend-note">Sample day · times in WIB</span>
+        <span className="tl__legend-note">Sample snapshot · times in WIB</span>
       </p>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Link } from "react-router";
 import { useResource } from "@/hooks/useResource";
-import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { gsap, shift, useGSAP } from "@/motion/gsap";
 import { api } from "@/services";
 import { Logo } from "./Logo";
 
@@ -37,9 +37,10 @@ export function Footer() {
   // The member-colour stripe rises bar by bar when the footer comes into view.
   useGSAP(
     () => {
-      if (!stripe.current || !colors.length || reducedMotion()) return;
+      if (!stripe.current || !colors.length) return;
       gsap.from(stripe.current.children, {
-        scaleY: 0,
+        scaleY: shift(1) ? 0 : 1,
+        autoAlpha: shift(1) ? 1 : 0,
         duration: 0.6,
         ease: "power3.out",
         stagger: 0.03,
@@ -59,8 +60,7 @@ export function Footer() {
         <div className="footer__brand">
           <Logo />
           <p className="small">
-            An unofficial fan site for JKT48. Not affiliated with JKT48 or its management. While Avonera48 is in preview, every member, show, stream and article is
-            sample data.
+            An unofficial fan site for JKT48. Not affiliated with JKT48 or its management. Data shown is a sample snapshot of the jkt48connect.com API.
           </p>
         </div>
         {cols.map((c) => (

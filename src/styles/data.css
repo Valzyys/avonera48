@@ -11,92 +11,50 @@
   object-fit: cover;
 }
 
-/* Name card: the member's colour, her nickname set vertically like a
-   Japanese name plate, generation top-left, full name bottom-left. */
-.nc {
-  --tint: color-mix(in oklab, var(--oshi) 20%, var(--surface));
+/* Member photo slot. Real photos come from the source; the fallback is
+   a calm tinted tile with initials. */
+.mp {
   position: relative;
   overflow: hidden;
-  background: var(--tint);
-  color: var(--text);
+  background: color-mix(in oklab, var(--oshi) 18%, var(--surface-2));
 }
-.nc::before {
-  /* the colour bar along the left edge — the card's one solid colour */
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 8px;
-  background: var(--oshi);
+.mp > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
 }
-.nc__gen {
-  position: absolute;
-  top: 12px;
-  left: 20px;
+.mp__fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: color-mix(in oklab, var(--oshi) 40%, var(--text));
-}
-.nc__nick {
-  position: absolute;
-  top: 12px;
-  right: 10px;
-  writing-mode: vertical-rl;
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 1.2rem + 2.6vw, 3.25rem);
+  font-size: clamp(1.5rem, 1rem + 2vw, 2.5rem);
   font-weight: 900;
-  line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: color-mix(in oklab, var(--oshi) 35%, var(--text));
-}
-.nc__name {
-  position: absolute;
-  left: 20px;
-  right: 64px;
-  bottom: 36px;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--text-2);
-}
-.nc--compact .nc__nick {
-  font-size: 1.6rem;
-}
-.nc--thumb::before {
-  inset: auto 0 0 0;
-  width: auto;
-  height: 6px;
-}
-.nc--thumb .nc__nick {
-  top: auto;
-  right: auto;
-  left: 14px;
-  bottom: 16px;
-  writing-mode: horizontal-tb;
-  font-size: clamp(1.5rem, 1rem + 1.6vw, 2.25rem);
+  color: color-mix(in oklab, var(--oshi) 45%, var(--text));
 }
 
-/* Theater artwork placeholder: an ink panel with the setlist name. */
+/* Theater poster slot. */
 .sa {
   position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--oshi) 22%, #1c1a19);
+  color: #fff;
+}
+.sa > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sa__fallback {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  height: 100%;
   padding: 12px 14px;
-  overflow: hidden;
-  background: hsl(var(--h) 28% 16%);
-  color: #fff;
-}
-.sa::after {
-  /* stage lights: three thin rules across the top */
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: hsl(var(--h) 70% 62%);
 }
 .sa__kicker {
   font-family: var(--font-display);
@@ -111,7 +69,6 @@
   font-size: clamp(0.95rem, 0.7rem + 0.8vw, 1.35rem);
   font-weight: 900;
   line-height: 1.15;
-  letter-spacing: 0.02em;
   text-transform: uppercase;
   text-wrap: balance;
 }
@@ -734,9 +691,6 @@
   overflow: hidden;
   box-shadow: var(--shadow-2);
 }
-.hero-card__photo .nc__nick {
-  font-size: clamp(2.25rem, 1.2rem + 3vw, 4rem);
-}
 .hero-card__info {
   display: grid;
   gap: 2px;
@@ -1136,7 +1090,7 @@
 }
 .tl__key--oshi {
   width: 30px;
-  background: linear-gradient(90deg, #f29bb8 0 25%, #8fc8f2 25% 50%, #f5d06b 50% 75%, #9bd3a5 75%);
+  background: linear-gradient(90deg, #e5679c 0 25%, #4b8fe2 25% 50%, #ef7a3c 50% 75%, #3aa877 75%);
 }
 .tl__key--live {
   background: var(--live);
@@ -1340,12 +1294,6 @@
   aspect-ratio: 3 / 4;
   overflow: hidden;
 }
-.profile__photo .nc__nick {
-  font-size: clamp(3rem, 2rem + 3vw, 5rem);
-}
-.profile__photo .nc__name {
-  font-size: var(--fs-sm);
-}
 .profile__info {
   display: grid;
   gap: var(--s-5);
@@ -1545,4 +1493,180 @@
 }
 .t-mono {
   font-family: var(--font-mono);
+}
+
+/* ======================= SOFT SHAPES + PHOTOS ======================= */
+
+.live-tile__media,
+.stream-card__media,
+.member-card__photo,
+.hero-card__photo,
+.profile__photo,
+.show-hero__art,
+.lineup-member__photo,
+.stream-dialog__thumb,
+.next-show,
+.panel,
+.today__board {
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.show-row__art,
+.next-show__art {
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.card-flag {
+  left: 10px;
+  bottom: 10px;
+}
+.live-tile__time,
+.stream-card__duration {
+  right: 10px;
+  bottom: 10px;
+  border-radius: var(--r-full);
+}
+.show-row {
+  padding-inline: var(--s-3);
+  margin-inline: calc(var(--s-3) * -1);
+  border-radius: var(--r-md);
+}
+.show-row__art {
+  aspect-ratio: 16 / 9;
+}
+.news-row__cat,
+.related-members a {
+  border-radius: var(--r-full);
+}
+.news-row {
+  padding-inline: var(--s-3);
+  margin-inline: calc(var(--s-3) * -1);
+  border-radius: var(--r-md);
+}
+.roster__swatch {
+  border-radius: 50%;
+}
+.roster__member:hover .roster__swatch {
+  transform: scale(1.4);
+}
+.tl__bar,
+.tl__show,
+.tl__now-label {
+  border-radius: 6px;
+}
+.rank__bar,
+.rank__bar span {
+  border-radius: var(--r-full);
+}
+.show-hero__art,
+.next-show__art {
+  aspect-ratio: 3 / 4;
+}
+
+/* member name over the photo */
+.hero-card__photo::after {
+  content: "";
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.55), transparent);
+  pointer-events: none;
+}
+.hero-card__name {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  z-index: 2;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1rem + 1.6vw, 2.4rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.hero-card .card-flag {
+  top: 10px;
+  bottom: auto;
+}
+.member-card__link {
+  gap: 4px;
+}
+.member-card__photo {
+  margin-bottom: 6px;
+}
+.member-card__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+.member-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.member-card__team {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.member-card .card-flag {
+  top: 10px;
+  bottom: auto;
+}
+
+.socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.socials__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.socials__link:hover {
+  border-color: var(--text);
+  background: var(--hover);
+}
+
+.article__source {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-4);
+  padding: var(--s-6);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+
+.intro__stripe {
+  position: relative;
+  overflow: hidden;
+}
+.intro__stripe img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+}
+.intro__center {
+  border-radius: var(--r-lg);
+}
+
+.member-filters .tabs--segmented {
+  justify-self: start;
+}
+@media (min-width: 1000px) {
+  .member-filters {
+    grid-template-columns: minmax(220px, 1fr) auto 200px 160px;
+    align-items: center;
+  }
 }

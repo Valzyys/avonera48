@@ -516,3 +516,7 @@
   transform: scaleX(0.7);
   transition: transform 1.2s var(--ease), opacity 0.2s;
 }
+
+.live-chip {
+  border-radius: var(--r-full);
+}

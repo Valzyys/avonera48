@@ -54,13 +54,13 @@ function Section({ id, children, band }: { id: string; children: ReactNode; band
 }
 
 /* ------------------------------------------------------------------ */
-/* INTRO — member colours                                              */
+/* INTRO — the members                                                 */
 
 /**
- * The members' oshi colours rise as a row of stripes and close over the
- * page, the wordmark is set on top, then the stripes fall away in reverse
- * order to reveal the board. GSAP timeline, ~1.7s, once per session,
- * skippable, never shown with reduced motion.
+ * A row of member photo strips rises and closes over the page, the
+ * wordmark plate opens on top, then the strips lift away in reverse order
+ * to reveal the board. GSAP timeline, ~2.5s, once per session, skippable,
+ * never shown with reduced motion.
  */
 function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -107,12 +107,14 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
     { scope: ref, dependencies: [ready] },
   );
 
-  const colors = (members.data ?? []).filter((m) => m.status !== "graduated").map((m) => m.color);
+  const cast = (members.data ?? []).filter((m) => m.status === "active" && m.photoUrl).slice(0, 14);
   return (
     <div ref={ref} className="intro" aria-hidden>
       <div className="intro__stripes">
-        {colors.map((c, k) => (
-          <span key={k} className="intro__stripe" style={{ background: c }} />
+        {cast.map((m) => (
+          <span key={m.slug} className="intro__stripe" style={{ background: m.color }}>
+            <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" />
+          </span>
         ))}
       </div>
       {ready && (
@@ -165,16 +167,23 @@ function LiveCard({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveItem) => v
   return (
     <button ref={ref} type="button" className="hero-card" onClick={() => onOpen(item)} style={oshi(item.member)}>
       <span className="hero-card__photo">
-        <MemberPhoto member={item.member} />
-        <Flag tone="live" className="card-flag">
-          LIVE
-        </Flag>
+        <MemberPhoto member={item.member} eager />
+        {item.status === "live" ? (
+          <Flag tone="live" className="card-flag">
+            LIVE
+          </Flag>
+        ) : (
+          <Flag tone="light" className="card-flag">
+            ENDED {formatTime(item.endedAt!)}
+          </Flag>
+        )}
+        <span className="hero-card__name">{item.member.nickname}</span>
       </span>
       <span className="hero-card__info">
         <span className="hero-card__title">{item.title}</span>
         <span className="hero-card__meta">
           <PlatformMark platform={item.platform} />
-          <LiveFor since={item.startedAt} />
+          {item.status === "live" ? <LiveFor since={item.startedAt} /> : <span className="num">{compact.format(item.viewers ?? 0)} viewers</span>}
         </span>
       </span>
     </button>
@@ -247,7 +256,7 @@ function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone
   const todayStreams = ready ? [...live.data!, ...recent.data!.filter((s) => new Date(s.startedAt).getTime() >= dayStart)] : [];
   const todayShows = (shows.data ?? []).filter((s) => {
     const t = new Date(s.startsAt).getTime();
-    return t >= dayStart && t < dayStart + DAY && s.status !== "cancelled";
+    return t >= dayStart && t < dayStart + DAY;
   });
   const upcoming = (shows.data ?? []).filter((s) => s.status === "upcoming" && new Date(s.startsAt).getTime() > now);
   const next = upcoming[0];
@@ -259,8 +268,12 @@ function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone
   // Entrance: title lines rise from their masks, then cards, board, panels.
   useGSAP(
     () => {
-      if (!ready || !introDone || !ref.current || reducedMotion()) return;
+      if (!ready || !introDone || !ref.current) return;
       const q = gsap.utils.selector(ref);
+      if (reducedMotion()) {
+        gsap.from(q(".today__top, .today__board, .today__below"), { autoAlpha: 0, duration: 0.6, stagger: 0.1 });
+        return;
+      }
       gsap
         .timeline()
         .from(q(".today__line > span"), { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.08 })
@@ -317,12 +330,12 @@ function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone
               </ButtonLink>
             </div>
             <p className="today__note" data-in>
-              <PreviewTag>Sample day — names, streams and shows are preview data</PreviewTag>
+              <PreviewTag>Sample snapshot from the jkt48connect.com API, replayed at 23:20 WIB</PreviewTag>
             </p>
           </div>
 
-          <div className="today__cards" aria-label="Members live now">
-            {live.data ? live.data.slice(0, 3).map((l) => <LiveCard key={l.id} item={l} onOpen={onOpen} />) : [0, 1, 2].map((k) => <Skeleton key={k} height={300} />)}
+          <div className="today__cards" aria-label="Live now and just ended">
+            {ready ? [...live.data!, ...recent.data!].slice(0, 3).map((l) => <LiveCard key={l.id} item={l} onOpen={onOpen} />) : [0, 1, 2].map((k) => <Skeleton key={k} height={300} />)}
           </div>
         </div>
 
@@ -551,12 +564,12 @@ function Roster() {
         ) : (
           <div className="roster" ref={list}>
             {gens.data.map((g) => {
-              const members = res.data!.filter((m) => m.generation === g.number);
+              const members = res.data!.filter((m) => (m.generation ?? 0) === g.number);
               return (
                 <div key={g.number} className="roster__gen">
                   <div className="roster__head">
-                    <span className="roster__num">{String(g.number).padStart(2, "0")}</span>
-                    <span className="label">Generation</span>
+                    <span className="roster__num">{g.number ? String(g.number).padStart(2, "0") : "—"}</span>
+                    <span className="label">{g.number ? "Generation" : "Generation not listed"}</span>
                   </div>
                   <ul className="roster__list">
                     {members.map((m) => (
@@ -586,9 +599,9 @@ export function HomePage() {
   const [stream, setStream] = useState<LiveItem | null>(null);
   const [intro, setIntro] = useState(() => {
     try {
-      if (sessionStorage.getItem(INTRO_KEY) || reducedMotion()) return false;
-      sessionStorage.setItem(INTRO_KEY, "1");
-      return true;
+      // Read only here: the key is written when the intro finishes, so a
+      // double-invoked initializer (StrictMode) cannot swallow it.
+      return !sessionStorage.getItem(INTRO_KEY) && !reducedMotion();
     } catch {
       return false;
     }
@@ -596,7 +609,19 @@ export function HomePage() {
   const [revealed, setRevealed] = useState(!intro);
   return (
     <div className="home">
-      {intro && <Intro onReveal={() => setRevealed(true)} onDone={() => setIntro(false)} />}
+      {intro && (
+        <Intro
+          onReveal={() => setRevealed(true)}
+          onDone={() => {
+            try {
+              sessionStorage.setItem(INTRO_KEY, "1");
+            } catch {
+              /* private mode: the intro simply plays again next time */
+            }
+            setIntro(false);
+          }}
+        />
+      )}
       <Today onOpen={setStream} introDone={revealed} />
       <Ranking />
       <RecentStreams onOpen={setStream} />

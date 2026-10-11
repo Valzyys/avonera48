@@ -1,6 +1,7 @@
 /**
- * Domain models for the Avonera48 fan site. The preview (mock) adapter and
- * any future real data source both return these shapes.
+ * Domain models for the Avonera48 fan site. The snapshot adapter (sample
+ * responses from the jkt48connect.com API) and any future live adapter
+ * both return these shapes.
  */
 
 export type ISODate = string;
@@ -8,29 +9,35 @@ export type ISODate = string;
 /* ---------------------------------------------------------------- members */
 
 export type MemberStatus = "active" | "trainee" | "graduated";
+export type Team = "LOVE" | "DREAM" | "PASSION" | "TRAINEE" | "JKT48";
+
+export interface Social {
+  title: string;
+  url: string;
+}
 
 export interface Member {
-  /** Stable id, also used as the URL slug (/members/:slug). */
+  /** API `url_key`, also the URL slug (/members/:slug). */
   slug: string;
   name: string;
   nickname: string;
-  generation: number;
+  /** Generation number; null when the source does not list one. */
+  generation: number | null;
+  team: Team;
   status: MemberStatus;
-  /** Official photo URL when a real source provides one. Preview data has none. */
   photoUrl?: string;
-  /** Hue for the placeholder tile shown when there is no photo. */
-  hue: number;
-  /** Oshi color — the member's penlight color (fictional in preview data). */
+  /** Site accent colour, derived from the team. A design choice, not an official colour. */
   color: string;
-  /** Optional profile text. Preview records carry placeholder copy, never real biography. */
-  bio: string;
-  joinedYear: number;
-  /** Fictional in preview data. */
-  birthday: string; // YYYY-MM-DD
-  tags: string[];
+  jkt48Id: string;
+  showroomRoomId?: number;
+  idnUsername?: string;
+  socials: Social[];
+  /** YYYY-MM-DD, when the source has it. */
+  birthday?: string;
 }
 
 export interface Generation {
+  /** 0 = generation not listed by the source. */
   number: number;
   label: string;
 }
@@ -47,55 +54,46 @@ export interface LiveStream {
   status: "live" | "ended";
   startedAt: ISODate;
   endedAt?: ISODate;
-  /** Viewer count reported by the platform, if any. */
+  /** Viewer count (peak when available). */
   viewers?: number;
-  /** Link to the stream on its platform. Null in preview data. */
+  /** HLS playback URL, when the source provides one. */
   url: string | null;
-  /** Replay link, only when the platform actually provides one. */
+  /** Archive link (e.g. YouTube), only when the source provides one. */
   replayUrl: string | null;
   thumbnailUrl?: string;
+  /** Gift total as the source formats it, e.g. "Rp 3.067.500". */
+  giftTotal?: string;
+  comments?: number;
 }
 
 /* ---------------------------------------------------------------- theater */
 
-export type ShowStatus = "upcoming" | "completed" | "cancelled";
-
-export interface LineupEntry {
-  memberSlug: string;
-  role?: "center" | "unit";
-  unitSong?: string;
-}
+export type ShowStatus = "upcoming" | "completed";
 
 export interface TheaterShow {
+  /** Reference code from the source, lower-case. */
   slug: string;
+  code: string;
   title: string;
-  /** Setlist / stage name. */
-  setlist: string;
-  description: string;
   startsAt: ISODate;
-  venue: string;
+  endsAt: ISODate;
   status: ShowStatus;
-  lineup: LineupEntry[];
-  /** Poster/artwork URL from a real source. Preview data has none. */
+  /** Team performing, as listed by the source. */
+  team: string;
+  /** Member slugs; empty when the lineup is not announced. */
+  lineup: string[];
   posterUrl?: string;
-  /** Hue for the placeholder tile shown when there is no poster. */
-  hue: number;
-  note?: string;
+  bannerUrl?: string;
+  birthdayShow: boolean;
 }
 
 /* ---------------------------------------------------------------- news */
 
-export type NewsCategory = "Theater" | "Release" | "Event" | "Announcement";
-
 export interface NewsArticle {
   slug: string;
   title: string;
-  category: NewsCategory;
+  category: string;
   publishedAt: ISODate;
-  summary: string;
-  body: string[];
-  relatedMemberSlugs: string[];
-  featured?: boolean;
-  imageUrl?: string;
-  hue: number;
+  /** The article on the official site. */
+  url: string;
 }

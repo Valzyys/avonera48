@@ -5,10 +5,8 @@ import { EmptyState, ErrorState, PreviewTag, SkeletonRows, Tabs } from "@/compon
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
-import type { NewsCategory } from "@/types";
-
-type Filter = "all" | NewsCategory;
-const CATS: Filter[] = ["all", "Theater", "Release", "Event", "Announcement"];
+const CATS = ["all", "Theater", "Event", "Other"] as const;
+type Filter = (typeof CATS)[number];
 
 export default function NewsPage() {
   useDocumentTitle("News");
@@ -18,7 +16,7 @@ export default function NewsPage() {
 
   return (
     <div className="page">
-      <PageHeader label="Information" title="News" lead="Theater updates, releases, events and announcements." aside={<PreviewTag>Placeholder articles</PreviewTag>} />
+      <PageHeader label="Information" title="News" lead="Official announcements, newest first. Each one links to the full text on jkt48.com." aside={<PreviewTag>Sample snapshot</PreviewTag>} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs label="Category" value={cat} onChange={(c) => setParams(c === "all" ? {} : { category: c }, { replace: true })} items={CATS.map((c) => ({ id: c, label: c === "all" ? "All" : c }))} />

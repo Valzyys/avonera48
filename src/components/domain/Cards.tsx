@@ -6,7 +6,8 @@ import { formatClock, useClock } from "@/hooks/useClock";
 import { api, type LiveItem, type ShowSummary } from "@/services";
 import type { Member, NewsArticle } from "@/types";
 import { cx, formatDate, formatDuration, formatRelative, formatTime } from "@/utils/format";
-import { MemberStatusBadge, ShowStatusBadge } from "./Badges";
+import { teamLabel } from "@/utils/team";
+import { ShowStatusBadge } from "./Badges";
 
 /** view-transition-name helpers: one name per record, shared by list and detail. */
 export const vtPhoto = (slug: string): CSSProperties => ({ viewTransitionName: `photo-${slug}` });
@@ -96,11 +97,14 @@ export function ShowRow({ show, withDate = false, shareName = true }: { show: Sh
           <span className="show-row__clock">{formatTime(show.startsAt)}</span>
         </span>
         <span className="show-row__art" style={shareName ? vtShow(show.slug) : undefined}>
-          <ShowArt show={show} />
+          <ShowArt show={show} banner />
         </span>
         <span className="show-row__main">
           <span className="show-row__title">{show.title}</span>
-          <span className="meta">{show.center ? `Center · ${show.center.nickname}` : show.lineupMembers.length ? `${show.lineupMembers.length} members` : "Lineup not announced"}</span>
+          <span className="meta">
+            {teamLabel(show.team)} · {show.lineupMembers.length ? `${show.lineupMembers.length} members` : "lineup TBA"}
+            {show.birthdayShow && " · Birthday show"}
+          </span>
         </span>
         <span className="show-row__lineup">
           <LineupAvatars members={show.lineupMembers} max={6} />
@@ -126,8 +130,10 @@ export function MemberCard({ member, live }: { member: Member; live?: boolean; i
             </Flag>
           )}
         </span>
+        <span className="member-card__name">{member.nickname}</span>
         <span className="member-card__meta meta">
-          {member.status !== "active" ? <MemberStatusBadge status={member.status} /> : <span>Joined {member.joinedYear}</span>}
+          <span>{member.name}</span>
+          <span className="member-card__team">{teamLabel(member.team)}</span>
         </span>
       </Link>
     </li>

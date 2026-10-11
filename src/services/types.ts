@@ -1,9 +1,11 @@
-import type { Generation, LivePlatform, LiveStream, Member, MemberStatus, NewsArticle, NewsCategory, ShowStatus, TheaterShow } from "@/types";
+import type { Generation, LivePlatform, LiveStream, Member, MemberStatus, NewsArticle, ShowStatus, Team, TheaterShow } from "@/types";
 
 export interface MemberQuery {
   search?: string;
+  /** 0 = generation not listed. */
   generation?: number;
   status?: MemberStatus;
+  team?: Team;
   sort?: "name" | "generation";
 }
 
@@ -18,12 +20,12 @@ export interface LiveItem extends LiveStream {
 }
 
 export interface ShowSummary extends TheaterShow {
-  center: Member | null;
   lineupMembers: Member[];
 }
 
 export interface ShowDetail extends ShowSummary {
-  lineupDetail: { member: Member; role?: "center" | "unit"; unitSong?: string }[];
+  /** Other performances with the same title. */
+  sameTitle: ShowSummary[];
 }
 
 export interface MemberDetail {
@@ -50,6 +52,7 @@ export interface Overview {
 
 export interface NewsDetail {
   article: NewsArticle;
+  /** Members named in the headline. */
   related: Member[];
   more: NewsArticle[];
 }
@@ -60,7 +63,7 @@ export interface NewsDetail {
  * without changes to the pages.
  */
 export interface DataService {
-  readonly mode: "preview" | "live";
+  readonly mode: "snapshot" | "live";
   /** The data source's notion of "now" — relative times are computed from it. */
   readonly now: string;
 
@@ -78,7 +81,7 @@ export interface DataService {
   listShows(status?: ShowStatus): Promise<ShowSummary[]>;
   getShow(slug: string): Promise<ShowDetail | null>;
 
-  listNews(category?: NewsCategory): Promise<NewsArticle[]>;
+  listNews(category?: string): Promise<NewsArticle[]>;
   getNews(slug: string): Promise<NewsDetail | null>;
 
   /**
