@@ -41,7 +41,7 @@ describe("live adapter", () => {
       {
         members: membersResponse,
         birthdays: [],
-        live: [{ name: "Jesslyn", url_key: "JKT48-Jesslyn", platform: "showroom", img: "https://jkt48connect.com/api/img/i/x.jpg", stream_url: "https://example.invalid/playlist.m3u8", started_at: "2026-10-11T05:00:00Z" }],
+        live: [{ name: "Jesslyn", url_key: "JKT48-Jesslyn", platform: "showroom", img: "/media/api/img/i/x.jpg", stream_url: "https://example.invalid/playlist.m3u8", started_at: "2026-10-11T05:00:00Z" }],
         recent: [],
         theater: [],
         news: [],

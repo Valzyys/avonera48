@@ -1,5 +1,5 @@
 /**
- * Pure mapping from jkt48connect.com API v1 responses to the site's domain
+ * Pure mapping from upstream API v1 responses to the site's domain
  * models. Used for both the live API (through the Worker) and the bundled
  * snapshot fallback.
  */

@@ -9,8 +9,8 @@
   "build": { "command": "npm run build" },
   // The Vite build output is served as static assets. Unknown paths fall back
   // to index.html so client-side routes (e.g. /dashboard/keys) resolve.
-  // Only /api/* reaches the Worker script first (health + jkt48connect proxy).
-  // The API key is a secret: `npx wrangler secret put JKT48CONNECT_API_KEY`.
+  // Only /api/* and /media/* reach the Worker script first (health, data and image proxy).
+  // The API key is a secret: `npx wrangler secret put DATA_API_KEY`.
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

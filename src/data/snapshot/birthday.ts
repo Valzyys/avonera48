@@ -1,6 +1,6 @@
 import type { ApiBirthday } from "./types";
 
-const B = (name: string, url_key: string, birthdate: string, id: string, ext = "jpg"): ApiBirthday => ({ name, url_key, birthdate, img: `https://jkt48connect.com/api/img/i/${id}.${ext}` });
+const B = (name: string, url_key: string, birthdate: string, id: string, ext = "jpg"): ApiBirthday => ({ name, url_key, birthdate, img: `/media/api/img/i/${id}.${ext}` });
 
 /** Snapshot of GET /api/v1/birthday. The date part of `birthdate` is the birthday (the source pairs it with `next_birthday` on that same date). */
 export const birthdayResponse: ApiBirthday[] = [

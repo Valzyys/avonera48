@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Downloads every member photo from the jkt48connect.com API into
+ * Downloads every member photo from the upstream data API into
  * public/photos/ and writes src/data/photos.json, so the site serves the
  * photos as its own static assets (no third-party request, instant load).
  *
- *   JKT48CONNECT_API_KEY=jk48c_... npm run photos
+ *   DATA_API_KEY=... npm run photos     (JKT48CONNECT_API_KEY also works)
  *
  * The key is read from the environment or from .dev.vars; it is never
  * written anywhere. Commit public/photos/ and src/data/photos.json after.
@@ -18,13 +18,14 @@ const outDir = path.join(root, "public", "photos");
 const manifestPath = path.join(root, "src", "data", "photos.json");
 
 async function apiKey() {
-  if (process.env.JKT48CONNECT_API_KEY) return process.env.JKT48CONNECT_API_KEY;
+  const env = process.env.DATA_API_KEY || process.env.JKT48CONNECT_API_KEY;
+  if (env) return env;
   const vars = path.join(root, ".dev.vars");
   if (existsSync(vars)) {
-    const m = /^JKT48CONNECT_API_KEY\s*=\s*"?([^"\n]+)"?/m.exec(await readFile(vars, "utf8"));
+    const m = /^(?:DATA_API_KEY|JKT48CONNECT_API_KEY)\s*=\s*"?([^"\n]+)"?/m.exec(await readFile(vars, "utf8"));
     if (m) return m[1].trim();
   }
-  throw new Error("Set JKT48CONNECT_API_KEY (environment or .dev.vars).");
+  throw new Error("Set DATA_API_KEY (environment or .dev.vars).");
 }
 
 const EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" };
