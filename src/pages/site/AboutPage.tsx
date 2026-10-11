@@ -106,8 +106,7 @@ export default function AboutPage() {
                 Avonera48 brings them together on one page that is quick to read on a phone.
               </p>
               <p>
-                With an account, members also get a dashboard where theater shows are played through a licensed partner service, with a ticket for a show or a
-                membership. Avonera48 does not publish content of its own.
+                Registered members can access a personalized dashboard with features designed to enhance their experience on Avonera48.
               </p>
             </Section>
 
