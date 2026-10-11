@@ -56,6 +56,10 @@
   transform: scale(1.25);
 }
 .sa__img {
+  object-fit: cover;
+  object-position: center 30%;
+}
+.sa--contain .sa__img {
   object-fit: contain;
 }
 .sa__fallback {
@@ -2004,8 +2008,27 @@
 .article__cover img {
   width: 100%;
 }
+.article .h-page {
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.35rem);
+  line-height: 1.2;
+  text-transform: none;
+  letter-spacing: 0;
+}
 .article__body {
-  max-width: 72ch;
+  max-width: 68ch;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+.article__body strong,
+.article__body b {
+  color: var(--text);
+}
+.article__body h2,
+.article__body h3,
+.article__body h4 {
+  margin: var(--s-6) 0 var(--s-2);
+  font-size: 1.05rem;
   color: var(--text);
 }
 .article__body p + p {

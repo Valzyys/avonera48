@@ -91,6 +91,12 @@ function standIn(key: string, name: string, img?: string): Member {
   };
 }
 
+/** First usable image as the thumbnail, the rest as fallbacks. */
+function thumbs(urls: (string | null | undefined)[]) {
+  const list = [...new Set(urls.filter((u): u is string => !!u).map((u) => (u.startsWith("/") ? u : media(u)!)))];
+  return { thumbnailUrl: list[0], thumbnailAlt: list.slice(1) };
+}
+
 /** /recent/detail sends epoch ms; the docs show ISO strings. Accept both. */
 const epoch = (v: number | string | null | undefined) => (typeof v === "number" ? v : v ? new Date(v).getTime() || 0 : 0);
 
@@ -169,7 +175,11 @@ export function buildDataset(raw: RawData, now: number): Dataset {
         viewers: d?.max_viewers ?? r.live_info.viewers.num,
         url: null,
         replayUrl: d?.youtube_url ?? null,
-        thumbnailUrl: media(d?.image || r.idn.image || r.member.img),
+        ...thumbs(
+          // SHOWROOM detail images are often missing upstream; the /recent
+          // room image is the reliable one there. IDN detail images are best.
+          r.type === "showroom" ? [r.idn.image, d?.image, r.member.img] : [d?.image, r.idn.image, r.member.img],
+        ),
         giftTotal: r.total_gift,
         stats: d ? toStats(d) : undefined,
       } satisfies LiveStream,
@@ -194,7 +204,7 @@ export function buildDataset(raw: RawData, now: number): Dataset {
         viewers: d.max_viewers,
         url: null,
         replayUrl: d.youtube_url,
-        thumbnailUrl: media(d.image),
+        ...thumbs([d.image, d.avatar, member.photoUrl]),
         stats: toStats(d),
       } satisfies LiveStream,
     ];

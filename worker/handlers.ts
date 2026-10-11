@@ -78,15 +78,27 @@ async function proxy(request: Request, env: Env, ctx: ExecutionContext, url: URL
  */
 async function media(request: Request, ctx: ExecutionContext, url: URL): Promise<Response> {
   const path = url.pathname.slice("/media/".length);
-  if (!/^(api\/img|img)\/[A-Za-z0-9/_.-]{1,300}$/.test(path)) return new Response("Not found", { status: 404 });
-  const upstream = `${UPSTREAM}/${path}`;
+  let upstream: string;
+  let headers: Record<string, string> = {};
+  let ttl = 31536000;
+  if (/^(api\/img|img)\/[A-Za-z0-9/_.-]{1,300}$/.test(path)) {
+    upstream = `${UPSTREAM}/${path}`;
+  } else {
+    // /media/x/<host>/<path>: images embedded in official news articles. The
+    // official site only serves them to its own pages, so ask as jkt48.com.
+    const m = /^x\/([a-z0-9.-]{1,80})\/(.{1,400})$/i.exec(path);
+    if (!m || !/(^|\.)jkt48\.com$/i.test(m[1])) return new Response("Not found", { status: 404 });
+    upstream = `https://${m[1]}/${m[2]}${url.search}`;
+    headers = { Origin: "https://jkt48.com", Referer: "https://jkt48.com/", "User-Agent": "Mozilla/5.0 (compatible; Avonera48 image proxy)" };
+    ttl = 2592000;
+  }
   const cache = caches.default;
   const key = new Request(upstream, { method: "GET" });
   const hit = await cache.match(key);
   if (hit) return hit;
   let res: Response;
   try {
-    res = await fetch(upstream, { cf: { cacheEverything: true, cacheTtl: 31536000 } } as RequestInit);
+    res = await fetch(upstream, { headers, cf: { cacheEverything: true, cacheTtl: ttl } } as RequestInit);
   } catch {
     return new Response("Upstream unreachable", { status: 502 });
   }
@@ -94,7 +106,7 @@ async function media(request: Request, ctx: ExecutionContext, url: URL): Promise
   if (!res.ok || !type.startsWith("image/")) return new Response("Not found", { status: res.ok ? 404 : res.status });
   const out = new Response(res.body, {
     status: 200,
-    headers: { "content-type": type, "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" },
+    headers: { "content-type": type, "cache-control": `public, max-age=${ttl}${ttl > 2592000 ? ", immutable" : ""}`, "x-content-type-options": "nosniff" },
   });
   ctx.waitUntil(cache.put(key, out.clone()));
   return out;
