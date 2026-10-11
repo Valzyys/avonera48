@@ -13,6 +13,8 @@ export interface DashShow extends ShowSummary {
 
 /** Two listings name the same performance when they start within this window. */
 const SAME_SHOW_MS = 45 * 60_000;
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const wibDay = (iso: string) => new Date(Date.parse(iso) + 7 * 3600_000).toISOString().slice(0, 10);
 
 /**
  * Joins the IDN Plus listing (what is sold, and whether it is live) with the
@@ -24,7 +26,9 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
     .filter((s) => s.status !== "ended")
     .map((s) => {
       const at = Date.parse(s.startsAt);
-      const match = schedule.find((t) => Math.abs(Date.parse(t.startsAt) - at) <= SAME_SHOW_MS);
+      const match =
+        schedule.find((t) => Math.abs(Date.parse(t.startsAt) - at) <= SAME_SHOW_MS) ??
+        schedule.find((t) => wibDay(t.startsAt) === wibDay(s.startsAt) && norm(t.title) === norm(s.title));
       return {
         slug: s.slug,
         code: s.code ?? match?.code ?? "",
@@ -35,7 +39,8 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
         team: s.team ?? match?.team ?? "JKT48",
         lineup: match?.lineup ?? [],
         lineupMembers: match?.lineupMembers ?? [],
-        posterUrl: s.image ?? match?.posterUrl,
+        // The dashboard shows the schedule's wide banner; the listing's own art is the stand-in.
+        posterUrl: match?.posterUrl ?? s.image ?? undefined,
         bannerUrl: match?.bannerUrl ?? s.image ?? undefined,
         birthdayShow: !!s.birthday || !!match?.birthdayShow,
         onAir: s.status === "live",

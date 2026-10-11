@@ -595,7 +595,7 @@
 .ov-hero {
   position: relative;
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
   gap: clamp(18px, 3vw, 36px);
   padding: clamp(18px, 2.6vw, 30px);
   border-radius: 28px;
@@ -620,7 +620,7 @@
   box-shadow: 0 20px 40px -14px rgb(0 0 0 / 0.6);
 }
 .ov-hero__art .sa {
-  aspect-ratio: var(--ar, 3 / 4);
+  aspect-ratio: var(--ar, 16 / 9);
 }
 .ov-hero__body {
   display: grid;
@@ -1867,7 +1867,7 @@ button.tx-row:hover:not(:disabled) {
 /* paywall */
 .paywall {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 40px);
   align-items: center;
   padding: clamp(20px, 3vw, 36px);
@@ -1881,7 +1881,7 @@ button.tx-row:hover:not(:disabled) {
   filter: saturate(0.8);
 }
 .paywall__art .sa {
-  aspect-ratio: var(--ar, 3 / 4);
+  aspect-ratio: var(--ar, 16 / 9);
 }
 .paywall__body {
   display: grid;
@@ -2210,7 +2210,7 @@ button.tx-row:hover:not(:disabled) {
     grid-template-columns: 1fr;
   }
   .ov-hero__art {
-    width: 120px;
+    width: 100%;
   }
   .ov-stats {
     grid-template-columns: 1fr;
@@ -2241,7 +2241,7 @@ button.tx-row:hover:not(:disabled) {
     grid-template-columns: 1fr;
   }
   .paywall__art {
-    width: 140px;
+    width: 100%;
   }
   .admin-filters,
   .admin-form--inline,

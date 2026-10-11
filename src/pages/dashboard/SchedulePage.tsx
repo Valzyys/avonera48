@@ -72,7 +72,7 @@ export default function SchedulePage() {
             return (
               <article key={s.slug} className={cx("sched-card", live && "is-live")}>
                 <div className="sched-card__art">
-                  <ShowArt show={s} use="poster" />
+                  <ShowArt show={s} use="banner" />
                   <span className="sched-card__date">
                     <b className="num">{formatDate(s.startsAt, { day: "numeric", month: undefined, year: undefined })}</b>
                     <span>{formatDate(s.startsAt, { day: undefined, month: "short", year: undefined })}</span>
