@@ -13,9 +13,10 @@ import { Link } from "react-router";
  */
 export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onClose: () => void }) {
   const live = stream?.status === "live";
-  // Prefer the stream's own link, then a replay, then the member's room on that platform.
+  // Live: the stream's own link, else the member's room on that platform.
+  // Finished streams get no outbound button (replays are not linked).
   const room = stream && (stream.platform === "IDN Live" ? (stream.member.idnUsername ? `https://www.idn.app/${stream.member.idnUsername}` : null) : stream.member.socials.find((x) => x.title === "SHOWROOM")?.url);
-  const href = stream ? (stream.url ?? (live ? room : stream.replayUrl)) : null;
+  const href = stream && live ? (stream.url ?? room) : null;
   return (
     <Dialog
       open={!!stream}
@@ -30,12 +31,16 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
             </Button>
             {href ? (
               <a className="btn btn--primary btn--md" href={href} target="_blank" rel="noreferrer noopener">
-                <span className="btn__label">{live ? `Open on ${stream.platform}` : "Watch replay"}</span>
+                <span className="btn__label">Open on {stream.platform}</span>
               </a>
-            ) : (
+            ) : live ? (
               <Button variant="primary" disabled title="The source has no link for this stream">
-                {live ? `Watch on ${stream.platform}` : "No replay available"}
+                Watch on {stream.platform}
               </Button>
+            ) : (
+              <Link to={`/recent-live/${encodeURIComponent(stream.id)}`} viewTransition onClick={onClose} className="btn btn--primary btn--md">
+                <span className="btn__label">Full stats</span>
+              </Link>
             )}
           </>
         )
