@@ -4,9 +4,13 @@ import { Button, CopyButton, ErrorState, Icon, Skeleton } from "@/components/ui"
 import { ApiError, rupiah, shop, type Order } from "@/features/members/api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useDash } from "@/layouts/DashboardLayout";
-import { gsap, useGSAP } from "@/motion/gsap";
+import { useGSAP } from "@/motion/gsap";
 import { cx, formatDateTime } from "@/utils/format";
+import { PayBadge, playOutcome, type PayOutcome } from "./PayBadge";
 import { StatusChip } from "./parts";
+
+const OUTCOME: Partial<Record<Order["status"], PayOutcome>> = { SUCCESS: "paid", CANCELLED: "cancelled", EXPIRED: "expired", FAILED: "cancelled" };
+const STAMP: Record<PayOutcome, string> = { paid: "Paid", cancelled: "Void", expired: "Expired" };
 
 /** Payment for one order: QRIS while pending, a receipt once paid. */
 export default function PayPage() {
@@ -51,14 +55,13 @@ export default function PayPage() {
     return () => window.clearInterval(t);
   }, []);
 
+  const outcome = order ? OUTCOME[order.status] : undefined;
+  // Plays once each time the order lands on a final state (also on a revisit).
   useGSAP(
     () => {
-      if (order?.status !== "SUCCESS") return;
-      gsap.fromTo(".pay-done__ring", { scale: 0.4, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.7, ease: "back.out(1.8)" });
-      gsap.fromTo(".pay-done__check path", { strokeDashoffset: 40 }, { strokeDashoffset: 0, duration: 0.6, delay: 0.25, ease: "power2.out" });
-      gsap.fromTo(".pay-confetti i", { y: 0, autoAlpha: 1 }, { y: () => 120 + Math.random() * 120, x: () => (Math.random() - 0.5) * 260, rotate: () => Math.random() * 360, autoAlpha: 0, duration: 1.6, ease: "power2.out", stagger: 0.01 });
+      if (outcome && ref.current) playOutcome(ref.current, outcome);
     },
-    { scope: ref, dependencies: [order?.status] },
+    { scope: ref, dependencies: [outcome] },
   );
 
   if (error && !order) {
@@ -155,16 +158,7 @@ export default function PayPage() {
             </>
           ) : order.status === "SUCCESS" ? (
             <div className="pay-done">
-              <span className="pay-confetti" aria-hidden>
-                {Array.from({ length: 36 }, (_, k) => (
-                  <i key={k} style={{ background: ["#e5679c", "#4b8fe2", "#ef7a3c", "#3aa877"][k % 4] }} />
-                ))}
-              </span>
-              <span className="pay-done__ring">
-                <svg className="pay-done__check" viewBox="0 0 24 24" width="44" height="44" aria-hidden>
-                  <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="40" />
-                </svg>
-              </span>
+              <PayBadge kind="paid" />
               <h1 className="pay-done__title">Payment received</h1>
               <p className="meta">
                 {order.kind === "membership" ? "Your membership is active. Every show is open to you." : "Your ticket is ready. See you at the show."}
@@ -186,9 +180,7 @@ export default function PayPage() {
             </div>
           ) : (
             <div className="pay-done is-off">
-              <span className="pay-done__ring is-off">
-                <Icon name="close" size={36} />
-              </span>
+              <PayBadge kind={order.status === "EXPIRED" ? "expired" : "cancelled"} />
               <h1 className="pay-done__title">{order.status === "EXPIRED" ? "Payment expired" : order.status === "CANCELLED" ? "Payment cancelled" : "Payment failed"}</h1>
               <p className="meta">Nothing was charged for this order. You can start a new one any time.</p>
               <div className="pay-actions">
@@ -202,6 +194,11 @@ export default function PayPage() {
         </section>
 
         <aside className="pay-receipt" aria-label="Order details">
+          {outcome && (
+            <span className={`pay-stamp is-${outcome}`} aria-hidden>
+              {STAMP[outcome]}
+            </span>
+          )}
           <span className="pay-receipt__kicker">{order.kind === "membership" ? "Membership" : "Show ticket"}</span>
           <h2 className="pay-receipt__title">{order.item_title}</h2>
           <dl className="pay-receipt__list">
@@ -223,7 +220,12 @@ export default function PayPage() {
             )}
             <div className="is-total">
               <dt>Total</dt>
-              <dd>{rupiah(amount)}</dd>
+              <dd>
+                <span className="pay-total">
+                  {rupiah(amount)}
+                  {outcome && outcome !== "paid" && <i className="pay-strike" aria-hidden />}
+                </span>
+              </dd>
             </div>
           </dl>
           <span className="pay-receipt__tear" aria-hidden />
