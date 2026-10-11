@@ -5,10 +5,11 @@ import { MemberStatusBadge } from "@/components/domain/Badges";
 import { NewsRow, ShowRow, StreamCard, vtPhoto } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { StreamDialog } from "@/components/domain/StreamDialog";
-import { Badge, Breadcrumb, Button, ButtonLink, EmptyState, ErrorState, Icon, PreviewTag, Skeleton, Tabs } from "@/components/ui";
+import { Badge, Breadcrumb, Button, ButtonLink, EmptyState, ErrorState, Icon, Skeleton, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
-import { gsap, shift, useGSAP } from "@/motion/gsap";
+import { enter, shift, useGSAP } from "@/motion/gsap";
 import { api, type LiveItem } from "@/services";
 import { compact, formatDate } from "@/utils/format";
 import { teamLabel } from "@/utils/team";
@@ -30,9 +31,9 @@ export default function MemberDetailPage() {
   useGSAP(
     () => {
       if (!m) return;
-      gsap.from(".profile__info > *", { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.06, delay: 0.15, clearProps: "transform,opacity,visibility" });
+      enter(".profile__info > *", { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.06, delay: 0.15, clearProps: "transform,opacity,visibility" });
     },
-    { scope: info, dependencies: [!!m, slug] },
+    { scope: info, revertOnUpdate: true, dependencies: [!!m, slug] },
   );
 
   if (res.status === "error") return <div className="container page-body"><ErrorState error={res.error} onRetry={res.reload} /></div>;
@@ -98,7 +99,7 @@ export default function MemberDetailPage() {
                     ))}
                   </ul>
                 )}
-                <PreviewTag>Profile from a sample jkt48connect.com response</PreviewTag>
+                <SourceNote />
                 <div className="actions-row">
                   {d?.isLive && (
                     <Button variant="primary" icon="broadcast" onClick={() => setStream(d.isLive)}>

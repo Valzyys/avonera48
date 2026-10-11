@@ -6,7 +6,8 @@
   "observability": { "enabled": true },
   // The Vite build output is served as static assets. Unknown paths fall back
   // to index.html so client-side routes (e.g. /dashboard/keys) resolve.
-  // Only /api/* reaches the Worker script first.
+  // Only /api/* reaches the Worker script first (health + jkt48connect proxy).
+  // The API key is a secret: `npx wrangler secret put JKT48CONNECT_API_KEY`.
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -14,6 +15,6 @@
     "run_worker_first": ["/api/*"]
   },
   "vars": {
-    "APP_ENV": "preview"
+    "APP_ENV": "production"
   }
 }

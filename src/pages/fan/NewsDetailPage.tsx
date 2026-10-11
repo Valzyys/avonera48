@@ -4,6 +4,7 @@ import { Avatar } from "@/components/media/Media";
 import { NewsRow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, Icon, Skeleton } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { useEntrance } from "@/motion/hooks";
@@ -58,7 +59,7 @@ export default function NewsDetailPage() {
                   <span className="btn__label">Read on jkt48.com</span>
                   <Icon name="arrowUpRight" size={16} />
                 </a>
-                <p className="meta">Headline from a sample jkt48connect.com news response.</p>
+                <SourceNote />
               </div>
               {d.related.length > 0 && (
                 <section className="article__related" aria-labelledby="related-t">

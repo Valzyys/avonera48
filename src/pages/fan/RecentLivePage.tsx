@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router";
 import { StreamCard } from "@/components/domain/Cards";
 import { StreamDialog } from "@/components/domain/StreamDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button, EmptyState, ErrorState, Field, PreviewTag, Select, Skeleton, Tabs } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Field, Select, Skeleton, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api, type LiveItem } from "@/services";
@@ -39,7 +40,7 @@ export default function RecentLivePage() {
 
   return (
     <div className="page">
-      <PageHeader label="Archive" title="Recent live" lead="Finished streams, newest first. Replays are linked only when the platform provides one." aside={<PreviewTag>Sample data</PreviewTag>} />
+      <PageHeader label="Archive" title="Recent live" lead="Finished streams, newest first. Replays are linked only when the platform provides one." aside={<SourceNote />} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs

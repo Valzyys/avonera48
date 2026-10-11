@@ -1,5 +1,5 @@
 import type { DependencyList, RefObject } from "react";
-import { gsap, ScrollTrigger, shift, useGSAP } from "./gsap";
+import { gsap, ScrollTrigger, shift, useGSAP, enter } from "./gsap";
 
 /**
  * Stagger the direct children of `ref` in when they scroll into view.
@@ -11,7 +11,7 @@ export function useStagger(ref: RefObject<HTMLElement | null>, deps: DependencyL
     () => {
       const el = ref.current;
       if (!el || el.children.length === 0) return;
-      gsap.from(el.children, {
+      enter(el.children, {
         autoAlpha: 0,
         y: shift(opts.y ?? 18),
         duration: 0.7,
@@ -20,7 +20,7 @@ export function useStagger(ref: RefObject<HTMLElement | null>, deps: DependencyL
         clearProps: "transform,opacity,visibility",
       });
     },
-    { scope: ref, dependencies: [...deps] },
+    { scope: ref, revertOnUpdate: true, dependencies: [...deps] },
   );
 }
 
@@ -35,11 +35,11 @@ export function useSectionReveal(ref: RefObject<HTMLElement | null>, deps: Depen
       if (!el) return;
       const tl = gsap.timeline({ scrollTrigger: { trigger: el, start: "top 82%", once: true } });
       const heading = el.querySelector(".h-section__inner");
-      if (heading) tl.from(heading, shift(1) ? { yPercent: 110, duration: 0.8, ease: "power4.out" } : { autoAlpha: 0, duration: 0.5 });
+      if (heading) enter(heading, shift(1) ? { yPercent: 110, duration: 0.8, ease: "power4.out" } : { autoAlpha: 0, duration: 0.5 }, tl);
       const rest = el.querySelectorAll("[data-reveal]");
-      if (rest.length) tl.from(rest, { autoAlpha: 0, y: shift(20), duration: 0.7, stagger: 0.08, clearProps: "transform,opacity,visibility" }, heading ? "-=0.5" : 0);
+      if (rest.length) enter(rest, { autoAlpha: 0, y: shift(20), duration: 0.7, stagger: 0.08, clearProps: "transform,opacity,visibility" }, tl, heading ? "-=0.5" : 0);
     },
-    { scope: ref, dependencies: [...deps] },
+    { scope: ref, revertOnUpdate: true, dependencies: [...deps] },
   );
 }
 
@@ -80,7 +80,7 @@ export function usePageMotion(root: RefObject<HTMLElement | null>, key: string) 
         triggers.forEach((t) => t.kill());
       };
     },
-    { scope: root, dependencies: [key] },
+    { scope: root, revertOnUpdate: true, dependencies: [key] },
   );
 }
 
@@ -91,8 +91,8 @@ export function useEntrance(ref: RefObject<HTMLElement | null>, deps: Dependency
       const el = ref.current;
       if (!el) return;
       const items = el.querySelectorAll("[data-in]");
-      if (items.length) gsap.from(items, { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.07, delay: 0.1, clearProps: "transform,opacity,visibility" });
+      if (items.length) enter(items, { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.07, delay: 0.1, clearProps: "transform,opacity,visibility" });
     },
-    { scope: ref, dependencies: [...deps] },
+    { scope: ref, revertOnUpdate: true, dependencies: [...deps] },
   );
 }

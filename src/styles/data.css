@@ -1670,3 +1670,40 @@
     align-items: center;
   }
 }
+
+/* intro on narrow screens: a grid of portrait tiles instead of thin strips */
+.intro--grid .intro__stripes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+.intro--grid .intro__stripe {
+  border-radius: 18px;
+}
+.intro--grid .intro__stripe::after {
+  content: "";
+  position: absolute;
+  inset: 55% 0 0;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.45), transparent);
+}
+.intro__tile-name {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.intro--grid .intro__center {
+  margin-inline: 16px;
+  padding: 20px 22px;
+}
+.intro--grid .intro__word {
+  font-size: clamp(2.2rem, 11vw, 4rem);
+}

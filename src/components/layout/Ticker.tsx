@@ -53,7 +53,7 @@ export function Ticker() {
         box.removeEventListener("focusout", resume);
       };
     },
-    { scope: root, dependencies: [items.length] },
+    { scope: root, revertOnUpdate: true, dependencies: [items.length] },
   );
 
   if (items.length === 0) return <div className="ticker" aria-hidden />;

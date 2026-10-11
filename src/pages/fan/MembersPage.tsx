@@ -1,7 +1,8 @@
 import { useSearchParams } from "react-router";
 import { MemberCard } from "@/components/domain/Cards";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button, EmptyState, ErrorState, Field, Input, PreviewTag, Select, Skeleton, Tabs } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Field, Input, Select, Skeleton, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
@@ -39,7 +40,7 @@ export default function MembersPage() {
 
   return (
     <div className="page">
-      <PageHeader label="Directory" title="Members" lead="Search by name or nickname, filter by team and generation." aside={<PreviewTag>Sample snapshot</PreviewTag>} />
+      <PageHeader label="Directory" title="Members" lead="Search by name or nickname, filter by team and generation." aside={<SourceNote />} />
       <div className="container page-body">
         <div className="member-filters">
           <Field label="Search members" hideLabel>

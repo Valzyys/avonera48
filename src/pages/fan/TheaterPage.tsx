@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { ShowRow } from "@/components/domain/Cards";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button, EmptyState, ErrorState, Field, Input, PreviewTag, SkeletonRows, Tabs } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Field, Input, SkeletonRows, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
@@ -43,7 +44,7 @@ export default function TheaterPage() {
 
   return (
     <div className="page">
-      <PageHeader label="Schedule" title="Theater" lead="Upcoming and past shows with lineups. Times in WIB (UTC+7)." aside={<PreviewTag>Sample schedule — not official</PreviewTag>} />
+      <PageHeader label="Schedule" title="Theater" lead="Upcoming and past shows with lineups. Times in WIB (UTC+7)." aside={<SourceNote />} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs

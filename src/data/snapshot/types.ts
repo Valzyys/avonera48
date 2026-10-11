@@ -37,6 +37,13 @@ export interface ApiLive {
   title?: string;
 }
 
+/** Envelope every endpoint returns. */
+export interface ApiEnvelope<T> {
+  ok: boolean;
+  data: T;
+  cached_at?: string;
+}
+
 /** GET /api/v1/recent → data[] */
 export interface ApiRecent {
   _id: string;
