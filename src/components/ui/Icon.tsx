@@ -48,6 +48,11 @@ const paths = {
   bolt: "M13 3 5 13.5h6L10 21l8-10.5h-6z",
   database: "M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3ZM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
   code: "M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16",
+  lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
+  play: "M8 5.5v13L19 12z",
+  volume: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11",
+  mute: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16 9.5l5 5M21 9.5l-5 5",
+  expand: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
 } as const;
 
 export type IconName = keyof typeof paths;

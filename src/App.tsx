@@ -1,5 +1,6 @@
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/features/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/features/theme/ThemeContext";
 import { SiteLayout } from "@/layouts/SiteLayout";
 import { HomePage } from "@/pages/site/HomePage";
@@ -14,6 +15,9 @@ import { RouteError } from "@/pages/site/RouteError";
 const page = (load: () => Promise<{ default: React.ComponentType }>) => async () => ({ Component: (await load()).default });
 
 const router = createBrowserRouter([
+  // Sign-in pages are full screen, outside the site chrome.
+  { path: "login", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).LoginPage }) },
+  { path: "register", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).RegisterPage }) },
   {
     element: <SiteLayout />,
     errorElement: <RouteError />,
@@ -29,6 +33,7 @@ const router = createBrowserRouter([
       { path: "news", lazy: page(() => import("@/pages/fan/NewsPage")) },
       { path: "news/:slug", lazy: page(() => import("@/pages/fan/NewsDetailPage")) },
       { path: "about", lazy: page(() => import("@/pages/site/AboutPage")) },
+      { path: "dashboard", lazy: page(() => import("@/pages/account/DashboardPage")) },
       { path: "*", lazy: page(() => import("@/pages/site/NotFoundPage")) },
     ],
   },
@@ -42,7 +47,9 @@ function ThemedToaster() {
 export function App() {
   return (
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
       <ThemedToaster />
     </ThemeProvider>
   );
