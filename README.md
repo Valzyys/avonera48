@@ -26,8 +26,8 @@ npx wrangler kv namespace create AUTH
 
 Then bind it:
 
-- **Pages:** Settings → Bindings → KV namespace, variable name `AUTH`.
-- **Worker:** add it to `wrangler.jsonc` as `"kv_namespaces": [{ "binding": "AUTH", "id": "<id>" }]`.
+- **Worker:** already bound in `wrangler.jsonc` (`kv_namespaces`).
+- **Pages:** Settings → Bindings → KV namespace, variable name `AUTH`. Pages does not read `wrangler.jsonc` (it is the Worker's config), so Pages bindings are set in the dashboard.
 
 Video in the room comes from the partner API (`worker/partner.ts`). Every call is signed on the server, so the credentials never reach the browser. Set them as secrets (Pages: Settings → Variables and Secrets):
 
@@ -43,6 +43,8 @@ The partner checks that signed calls come from the registered IP. Cloudflare Wor
 
 Shows are sold. A viewer can watch a show with a ticket for that show or with an active membership. Admins can always watch.
 
+The shows on sale, and whether one is live, come from the IDN Plus listing (`worker/stage.ts`, cached for a minute). Only the title, schedule, image, team, birthday and live status are used. The listing's playback URL is dropped on the server; the picture always comes from the partner room above. The team and lineup are filled in from the site's theater schedule when a show there starts at the same time.
+
 Orders, tickets, memberships, prices, vouchers and the room's chat live in a D1 database bound as `DB`. The tables are created on first use, so there is no migration step. A fresh database starts with these prices, which admins can change at `/dashboard/admin`:
 
 - Rp 5.000 per show.
@@ -56,8 +58,8 @@ npx wrangler d1 create avonera48
 
 Then bind it:
 
+- **Worker:** already bound in `wrangler.jsonc` (`d1_databases`).
 - **Pages:** Settings → Bindings → D1 database, variable name `DB`.
-- **Worker:** add it to `wrangler.jsonc` as `"d1_databases": [{ "binding": "DB", "database_name": "avonera48", "database_id": "<id>" }]`.
 
 Payments go through MYPG (QRIS), in `worker/payment.ts`. The server polls the gateway for the payment status while the pay page is open, so no webhook is needed. Set these as secrets or variables:
 
@@ -66,6 +68,7 @@ Payments go through MYPG (QRIS), in `worker/payment.ts`. The server polls the ga
 | `MYPG_API_KEY` | MYPG API key (secret) |
 | `ADMIN_EMAILS` | Comma-separated emails of accounts that may use `/dashboard/admin` |
 | `MYPG_API_URL` | Optional. Overrides `https://yobasepay.net/api_my` |
+| `SHOWS_API_URL` | Optional. Overrides the IDN Plus show listing URL |
 
 Redeploy after adding bindings or secrets so the functions pick them up.
 

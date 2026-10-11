@@ -12,7 +12,7 @@ import { DashHead, useDash } from "@/layouts/DashboardLayout";
 import { enter, useGSAP } from "@/motion/gsap";
 import { teamLabel } from "@/utils/team";
 import { formatDate } from "@/utils/format";
-import { isOnStage, ShowAction, showWhen, StatusChip } from "./parts";
+import { ShowAction, showWhen, StatusChip } from "./parts";
 
 const greeting = (now: number) => {
   const h = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Jakarta" }).format(now));
@@ -20,15 +20,15 @@ const greeting = (now: number) => {
 };
 
 export default function OverviewPage() {
-  useDocumentTitle("Members");
-  const { user, catalog, shows, reloadCatalog } = useDash();
+  useDocumentTitle("Dashboard");
+  const { user, catalog, shows, showsError, onAir, reloadCatalog } = useDash();
   const now = useClock();
   const ref = useRef<HTMLDivElement>(null);
   const orders = useResource(() => shop.orders(), []);
   const [buy, setBuy] = useState<CheckoutItem | null>(null);
 
   const list = shows ?? [];
-  const live = list.find((s) => isOnStage(s, now));
+  const live = onAir;
   const next = live ?? list[0];
   const membership = catalog?.membership;
   const daysLeft = membership ? Math.max(0, Math.ceil((Date.parse(membership.expires_at) - Date.now()) / 86400000)) : 0;
@@ -44,7 +44,7 @@ export default function OverviewPage() {
 
   return (
     <div className="dash-page" ref={ref}>
-      <DashHead kicker="Members area" title={<>{greeting(now)}, <span className="grad-text">{user.name.split(" ")[0]}</span></>} />
+      <DashHead kicker="Dashboard" title={<>{greeting(now)}, <span className="grad-text">{user.name.split(" ")[0]}</span></>} />
 
       {next ? (
         <section className={`ov-hero ${live ? "is-live" : ""}`} aria-label={live ? "On stage now" : "Next show"}>
@@ -64,6 +64,7 @@ export default function OverviewPage() {
             <h2 className="ov-hero__title">{next.title}</h2>
             <p className="ov-hero__meta">
               {showWhen(next)} · {teamLabel(next.team)}
+              {live && live.viewers > 0 && ` · ${live.viewers.toLocaleString("id-ID")} watching`}
             </p>
             <LineupAvatars members={next.lineupMembers} max={8} size={28} />
             {!live && <Countdown to={next.startsAt} now={now} />}
@@ -73,6 +74,14 @@ export default function OverviewPage() {
                 All shows <Icon name="arrowRight" size={14} />
               </Link>
             </div>
+          </div>
+        </section>
+      ) : shows || showsError ? (
+        <section className="ov-hero ov-hero--empty" aria-label="Next show">
+          <div className="ov-hero__body">
+            <span className="ov-hero__kicker">Theater</span>
+            <h2 className="ov-hero__title">{showsError ? "The show list is taking a break" : "No shows announced yet"}</h2>
+            <p className="ov-hero__meta">{showsError ? "It refreshes on its own every minute." : "New shows appear here as soon as they go on sale."}</p>
           </div>
         </section>
       ) : (
@@ -106,7 +115,10 @@ export default function OverviewPage() {
             </Link>
           </div>
           <ul className="ov-shows">
-            {list.slice(live ? 0 : 1, 6).map((s) => (
+            {list
+              .filter((s) => s !== next)
+              .slice(0, 5)
+              .map((s) => (
               <li key={s.slug} className="ov-show">
                 <span className="ov-show__date">
                   <span className="num">{formatDate(s.startsAt, { day: "numeric", month: undefined, year: undefined })}</span>

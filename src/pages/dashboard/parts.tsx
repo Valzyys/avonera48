@@ -2,10 +2,12 @@ import { Link } from "react-router";
 import type { CheckoutItem } from "@/components/domain/CheckoutDialog";
 import { Icon } from "@/components/ui";
 import { accessOf, priceOf, rupiah, type Catalog, type OrderStatus } from "@/features/members/api";
+import type { DashShow } from "@/features/members/stage";
 import type { ShowSummary } from "@/services/types";
 import { cx, formatDate, formatTime, formatWeekday } from "@/utils/format";
 
-export const isOnStage = (s: ShowSummary, now: number) => Date.parse(s.startsAt) <= now && now < Date.parse(s.endsAt);
+/** On air: what the show listing says; for other shows, the scheduled time. */
+export const isOnStage = (s: ShowSummary | DashShow, now: number) => ("onAir" in s ? s.onAir : Date.parse(s.startsAt) <= now && now < Date.parse(s.endsAt));
 
 export const showWhen = (s: ShowSummary) => `${formatWeekday(s.startsAt)} ${formatDate(s.startsAt, { year: undefined })} · ${formatTime(s.startsAt)} WIB`;
 

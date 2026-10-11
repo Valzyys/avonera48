@@ -7,9 +7,7 @@ import { Icon, Skeleton } from "@/components/ui";
 import { accessOf, ApiError, chat, type ChatMessage } from "@/features/members/api";
 import { formatCountdown, useClock } from "@/hooks/useClock";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { useResource } from "@/hooks/useResource";
 import { useDash, UserAvatar } from "@/layouts/DashboardLayout";
-import { api } from "@/services";
 import { cx, formatTime } from "@/utils/format";
 import { teamLabel } from "@/utils/team";
 import { isOnStage, ShowAction, showWhen } from "./parts";
@@ -66,10 +64,9 @@ const seat = {
 
 export default function WatchRoomPage() {
   const { slug = "" } = useParams();
-  const { user, catalog, reloadCatalog } = useDash();
+  const { user, catalog, reloadCatalog, shows, showsError } = useDash();
   const now = useClock();
-  const detail = useResource(() => api.getShow(slug), [slug]);
-  const show = detail.data ?? api.peekShow(slug) ?? null;
+  const show = shows?.find((s) => s.slug === slug) ?? null;
   useDocumentTitle(show ? `${show.title} · Watch` : "Watch");
   const [buy, setBuy] = useState<CheckoutItem | null>(null);
   // Phones show one panel under the player at a time.
@@ -78,7 +75,15 @@ export default function WatchRoomPage() {
   const access = user.isAdmin ? "admin" : accessOf(catalog, slug);
   const live = show ? isOnStage(show, now) : false;
 
-  if (!catalog || (detail.status === "loading" && !show)) {
+  if (showsError && !show) {
+    return (
+      <div className="dash-page">
+        <p className="dash-empty">The show list couldn’t be loaded. Reload the page in a moment.</p>
+      </div>
+    );
+  }
+
+  if (!catalog || !shows) {
     return (
       <div className="dash-page watch">
         <Skeleton height={460} />
@@ -134,7 +139,13 @@ export default function WatchRoomPage() {
                 <i aria-hidden />
                 {live ? "On stage" : `Starts ${formatTime(show.startsAt)} WIB`}
               </span>
+              {live && show.viewers > 0 && (
+                <span className="chip chip--mute">
+                  <Icon name="eye" size={13} /> {show.viewers.toLocaleString("id-ID")}
+                </span>
+              )}
               <span className="chip chip--mute">{teamLabel(show.team)}</span>
+              {show.birthday && <span className="chip chip--mute">Birthday · {show.birthday}</span>}
               <span className="chip chip--ok">{access === "membership" ? "Membership" : access === "admin" ? "Admin" : "Ticket"}</span>
             </div>
             <h1 className="watch-info__title">{show.title}</h1>

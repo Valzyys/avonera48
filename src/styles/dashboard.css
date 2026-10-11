@@ -189,6 +189,94 @@
   font-size: var(--fs-xs);
   font-weight: 600;
 }
+/* a theater show is on air: pill in the top bar, LIVE tag in the menu */
+.dash-onair {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: min(460px, 52vw);
+  height: 38px;
+  padding: 0 14px 0 5px;
+  border-radius: var(--r-full);
+  background: color-mix(in oklab, var(--live) 12%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--live) 35%, transparent);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.dash-onair:hover {
+  background: color-mix(in oklab, var(--live) 20%, var(--surface));
+}
+.dash-onair:active {
+  transform: scale(0.98);
+}
+.dash-onair__badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  background: var(--live);
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.dash-onair__badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.dash-onair__title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dash-onair svg {
+  flex: none;
+  color: var(--text-2);
+}
+.dash-nav__live {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--live);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dash-tabs__icon {
+  position: relative;
+  display: inline-grid;
+}
+.dash-tabs__dot {
+  position: absolute;
+  top: -2px;
+  right: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 2px var(--surface);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.sched-card__viewers {
+  font-weight: 500;
+  opacity: 0.85;
+}
+.ov-hero--empty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .dash-top__me {
   display: inline-flex;
   align-items: center;
@@ -781,22 +869,16 @@
 .sched-card.is-live {
   border-color: color-mix(in oklab, var(--live) 50%, transparent);
 }
+/* The art takes the image's own shape (IDN Plus art is wide): never cropped. */
 .sched-card__art {
   position: relative;
-  aspect-ratio: 4 / 3;
   overflow: hidden;
   background: #151312;
 }
-.sched-card__art .sa,
-.sched-card__art .sa--sized {
-  position: absolute;
-  inset: 0;
+.sched-card__art .sa {
+  display: block;
   width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-}
-.sched-card__art .sa__img {
-  object-fit: cover;
+  aspect-ratio: var(--ar, 16 / 9);
 }
 .sched-card__date {
   position: absolute;
@@ -2092,6 +2174,19 @@ button.tx-row:hover:not(:disabled) {
   .dash-tabs__link.is-active {
     background: var(--text);
     color: var(--bg);
+  }
+  .dash-onair {
+    max-width: none;
+    flex: 1;
+    height: 34px;
+    font-size: var(--fs-xs);
+  }
+  .dash-onair__badge {
+    height: 26px;
+    padding: 0 8px;
+  }
+  .dash-onair + .dash-top__spacer {
+    display: none;
   }
   .admin-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
