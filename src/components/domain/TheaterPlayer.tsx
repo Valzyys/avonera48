@@ -56,7 +56,20 @@ export async function resumePlayback(resumeUrl: string): Promise<Playback | null
  * (401/403) is resumed — at most three times, at least 5 s apart. Without a
  * header, browsers with native HLS but no MSE (older iOS) play it directly.
  */
-export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playback: Playback; resumeUrl?: string; title: string; onEnded?: () => void }) {
+export function TheaterPlayer({
+  playback,
+  resumeUrl,
+  title,
+  onEnded,
+  onFatal,
+}: {
+  playback: Playback;
+  resumeUrl?: string;
+  title: string;
+  onEnded?: () => void;
+  /** The stream can't be loaded at all (e.g. the playlist is refused); the owner may try another route. */
+  onFatal?: () => void;
+}) {
   const wrap = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const key = useRef(playback.headerValue);
@@ -83,6 +96,12 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
     let cancelled = false;
     let tries = 0;
     let lastRenew = 0;
+    let netFails = 0;
+    const giveUp = () => {
+      hls?.destroy();
+      if (onFatal) onFatal();
+      else setState("error");
+    };
     setState("loading");
 
     const start = async (url: string) => {
@@ -113,14 +132,22 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
         setState("ready");
         el.play().catch(() => undefined);
       });
+      h.on(HlsCtor.Events.FRAG_LOADED, () => {
+        netFails = 0;
+      });
       h.on(HlsCtor.Events.ERROR, (_e, d) => {
         const status = (d.response as { code?: number } | undefined)?.code;
         // Only a refused session needs a resume; other errors are the player's to retry.
         if (resumeUrl && (status === 401 || status === 403)) return void renew();
         if (!d.fatal) return;
-        if (d.type === HlsCtor.ErrorTypes.NETWORK_ERROR) h.startLoad();
-        else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
-        else setState("error");
+        console.warn("[player]", d.type, d.details, status ?? "");
+        if (d.type === HlsCtor.ErrorTypes.NETWORK_ERROR) {
+          // A playlist that can't be fetched at all won't come back by retrying.
+          const manifest = /^manifest/.test(d.details);
+          if (manifest || ++netFails > 3) return giveUp();
+          setTimeout(() => !cancelled && h.startLoad(), 1500);
+        } else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+        else giveUp();
       });
       h.loadSource(url);
       h.attachMedia(el);
@@ -158,7 +185,7 @@ export function TheaterPlayer({ playback, resumeUrl, title, onEnded }: { playbac
         el.load();
       }
     };
-  }, [source, generation, header, resumeUrl, onEnded]);
+  }, [source, generation, header, resumeUrl, onEnded, onFatal]);
 
   useEffect(() => {
     if (video.current) {
