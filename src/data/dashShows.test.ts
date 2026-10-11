@@ -15,6 +15,8 @@ const stage = (over: Partial<StageShow>): StageShow => ({
   viewers: 0,
   team: null,
   birthday: null,
+  banner: null,
+  poster: null,
   ...over,
 });
 

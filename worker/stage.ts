@@ -23,6 +23,9 @@ export interface StageShow {
   team: string | null;
   /** Member(s) celebrating a birthday at this show. */
   birthday: string | null;
+  /** Wide banner and poster from the theater schedule (/api/v1/theater), via /media. */
+  banner: string | null;
+  poster: string | null;
 }
 
 export interface RawStage {
@@ -75,7 +78,38 @@ export function parseStage(raw: RawStage, now = Date.now()): StageShow | null {
     viewers: Math.max(0, raw.view_count ?? 0),
     team: team ? team.toUpperCase() : null,
     birthday: line("Birthday"),
+    banner: null,
+    poster: null,
   };
+}
+
+/** A row of the theater schedule (/api/v1/theater). */
+export interface TheaterRow {
+  date?: string;
+  title?: string;
+  start_time?: string;
+  banner?: string | null;
+  poster?: string | null;
+}
+
+/** The data API's image URLs, served through this site's /media proxy. */
+const viaMedia = (u: string | null | undefined) => (u ? u.replace(/^https?:\/\/(?:www\.)?jkt48connect\.com\/((?:api\/)?img\/)/i, "/media/$1") : null);
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const wib = (iso: string) => new Date(Date.parse(iso) + 7 * 3600_000).toISOString();
+
+/**
+ * Gives each show the schedule's banner and poster: the schedule row on the
+ * same day at the same start time, else the same title on the same day.
+ */
+export function withArt(shows: StageShow[], rows: TheaterRow[]): StageShow[] {
+  return shows.map((s) => {
+    const at = wib(s.startsAt);
+    const day = at.slice(0, 10);
+    const hm = at.slice(11, 16);
+    const sameDay = rows.filter((r) => r.date === day);
+    const row = sameDay.find((r) => r.start_time?.slice(0, 5) === hm) ?? sameDay.find((r) => r.title && norm(r.title) === norm(s.title));
+    return row ? { ...s, banner: viaMedia(row.banner), poster: viaMedia(row.poster) } : s;
+  });
 }
 
 export function parseStageList(data: unknown, now = Date.now()): StageShow[] {

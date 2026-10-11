@@ -15,11 +15,14 @@
 import { ensureSchema, getSetting } from "./db";
 import { body, fail, randomId, reply, str } from "./http";
 import { cancelPayment, checkPayment, createPayment, gatewayTime, paymentReady, type PaymentEnv, type PayStatus } from "./payment";
-import { parseStageList, type StageShow } from "./stage";
+import { parseStageList, withArt, type StageShow, type TheaterRow } from "./stage";
 
 export interface ShopEnv extends PaymentEnv {
   DB?: D1Database;
   ADMIN_EMAILS?: string;
+  DATA_API_KEY?: string;
+  JKT48CONNECT_API_KEY?: string;
+  DATA_API_BASE?: string;
   /** Overrides the IDN Plus show listing (e.g. a mirror or a test server). */
   SHOWS_API_URL?: string;
 }
@@ -77,6 +80,21 @@ export interface Plan {
 /* ---------- the theater schedule (server-trusted titles and dates) ---------- */
 
 const SHOWS_URL = "https://v5.jkt48connect.com/api/jkt48/idnplus";
+const DATA_API = "https://jkt48connect.com";
+
+/** The theater schedule's rows (for banners and posters); empty when unavailable. */
+async function theaterRows(env: ShopEnv): Promise<TheaterRow[]> {
+  const key = env.DATA_API_KEY || env.JKT48CONNECT_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetch(`${env.DATA_API_BASE || DATA_API}/api/v1/theater?page=1`, { headers: { "x-api-key": key, accept: "application/json" } });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { data?: TheaterRow[] };
+    return Array.isArray(j.data) ? j.data : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * The shows on sale, from the IDN Plus listing. Cached at the edge for a
@@ -85,13 +103,13 @@ const SHOWS_URL = "https://v5.jkt48connect.com/api/jkt48/idnplus";
  */
 export async function theaterShows(env: ShopEnv): Promise<StageShow[] | null> {
   const cache = caches.default;
-  const cacheKey = new Request("https://shop.internal/stage?v=1");
+  const cacheKey = new Request("https://shop.internal/stage?v=2");
   const hit = await cache.match(cacheKey);
   if (hit) return (await hit.json()) as StageShow[];
   try {
-    const res = await fetch(env.SHOWS_API_URL || SHOWS_URL, { headers: { accept: "application/json" } });
+    const [res, rows] = await Promise.all([fetch(env.SHOWS_API_URL || SHOWS_URL, { headers: { accept: "application/json" } }), theaterRows(env)]);
     if (!res.ok) return null;
-    const shows = parseStageList(await res.json());
+    const shows = withArt(parseStageList(await res.json()), rows);
     await cache.put(cacheKey, new Response(JSON.stringify(shows), { headers: { "cache-control": "public, max-age=60" } }));
     return shows;
   } catch {

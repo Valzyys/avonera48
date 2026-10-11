@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseStage, parseStageList } from "../../worker/stage";
+import { parseStage, parseStageList, withArt } from "../../worker/stage";
 
 const passion = {
   slug: "passion-200-2026-10-11-261003211051",
@@ -66,5 +66,28 @@ describe("IDN Plus show listing", () => {
     const list = parseStageList({ data: [sambil, { slug: "x" }, passion] }, NOW);
     expect(list.map((s) => s.code)).toEqual(["GSEH2I", "GS0S8U"]);
     expect(parseStageList({ status: 500 })).toEqual([]);
+  });
+
+  it("takes the banner and poster from /api/v1/theater, through /media", () => {
+    const rows = [
+      {
+        date: "2026-10-17",
+        title: "Sambil Menggandeng Erat Tanganku",
+        start_time: "19:00",
+        banner: "https://jkt48connect.com/api/img/i/ejol3w32.jpg",
+        poster: "https://jkt48connect.com/api/img/i/ykbuwar6.jpg",
+      },
+      { date: "2026-10-17", title: "DREAM BAKUDAN", start_time: "14:00", banner: "https://jkt48connect.com/api/img/i/suktznhm.jpg", poster: null },
+    ];
+    const [s] = withArt([parseStage(sambil, NOW)!], rows);
+    expect(s.banner).toBe("/media/api/img/i/ejol3w32.jpg");
+    expect(s.poster).toBe("/media/api/img/i/ykbuwar6.jpg");
+
+    // Same day, start time off: the title still finds it.
+    const [late] = withArt([parseStage({ ...sambil, idnliveplus: { description: "Show start: 19.30" } }, NOW)!], rows);
+    expect(late.banner).toBe("/media/api/img/i/ejol3w32.jpg");
+
+    // Nothing on that day: no art.
+    expect(withArt([parseStage(passion, NOW)!], rows)[0].banner).toBeNull();
   });
 });
