@@ -692,3 +692,85 @@
 .page-fallback {
   min-height: 50vh;
 }
+
+/* ---------- soft shapes ----------
+   Pills for controls and labels, generous radii for surfaces. */
+
+.btn,
+.icon-btn,
+.badge,
+.flag,
+.copy-btn,
+.preview-tag {
+  border-radius: var(--r-full);
+}
+
+.flag {
+  padding: 0 9px;
+}
+
+.input,
+.input:focus-visible {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  padding-inline: 18px;
+}
+
+.input--with-icon {
+  padding-left: 42px;
+}
+
+.input--area {
+  border-radius: var(--r-md);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--line-3);
+}
+
+.input:focus-visible {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--text) 12%, transparent);
+}
+
+.tabs--segmented {
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+.tabs--segmented .tabs__tab {
+  position: relative;
+  z-index: 1;
+  padding-inline: 16px;
+}
+
+.tabs--segmented .tabs__indicator {
+  top: 4px;
+  bottom: 4px;
+  height: auto;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-1), 0 0 0 1px var(--line);
+}
+
+.callout,
+.skeleton,
+.dialog__panel {
+  border-radius: var(--r-md);
+}
+
+.input-wrap__icon {
+  left: 16px;
+}
+
+.select-wrap__chevron {
+  right: 16px;
+}
+
+.select {
+  padding-right: 40px;
+}

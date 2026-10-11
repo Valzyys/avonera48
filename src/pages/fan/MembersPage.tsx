@@ -5,21 +5,28 @@ import { Button, EmptyState, ErrorState, Field, Input, PreviewTag, Select, Skele
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
-import type { MemberStatus } from "@/types";
+import type { Team } from "@/types";
 
-type StatusFilter = "all" | MemberStatus;
+type TeamFilter = "all" | Team;
+const TEAM_TABS: { id: TeamFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "LOVE", label: "Love" },
+  { id: "DREAM", label: "Dream" },
+  { id: "PASSION", label: "Passion" },
+  { id: "TRAINEE", label: "Trainee" },
+];
 
 export default function MembersPage() {
   useDocumentTitle("Members");
   const [params, setParams] = useSearchParams();
   const search = params.get("q") ?? "";
   const generation = params.get("gen") ? Number(params.get("gen")) : undefined;
-  const status = (params.get("status") as StatusFilter) || "all";
+  const team = TEAM_TABS.some((t) => t.id === params.get("team")) ? (params.get("team") as TeamFilter) : "all";
   const sort = params.get("sort") === "generation" ? "generation" : "name";
 
   const gens = useResource(() => api.listGenerations(), []);
   const live = useResource(() => api.listLiveNow(), []);
-  const res = useResource(() => api.listMembers({ search, generation, status: status === "all" ? undefined : status, sort }), [search, generation, status, sort]);
+  const res = useResource(() => api.listMembers({ search, generation, team: team === "all" ? undefined : team, sort }), [search, generation, team, sort]);
   const liveSet = new Set(live.data?.map((l) => l.member.slug));
 
   const set = (k: string, v: string) => {
@@ -28,11 +35,11 @@ export default function MembersPage() {
     else next.set(k, v);
     setParams(next, { replace: true });
   };
-  const hasFilters = !!(search || generation || status !== "all");
+  const hasFilters = !!(search || generation !== undefined || team !== "all");
 
   return (
     <div className="page">
-      <PageHeader label="Directory" title="Members" lead="Search by name or nickname, filter by generation and status." aside={<PreviewTag>Sample profiles</PreviewTag>} />
+      <PageHeader label="Directory" title="Members" lead="Search by name or nickname, filter by team and generation." aside={<PreviewTag>Sample snapshot</PreviewTag>} />
       <div className="container page-body">
         <div className="member-filters">
           <Field label="Search members" hideLabel>
@@ -40,15 +47,10 @@ export default function MembersPage() {
           </Field>
           <Tabs
             segmented
-            label="Status"
-            value={status}
-            onChange={(v) => set("status", v)}
-            items={[
-              { id: "all", label: "All" },
-              { id: "active", label: "Active" },
-              { id: "trainee", label: "Trainee" },
-              { id: "graduated", label: "Graduated" },
-            ]}
+            label="Team"
+            value={team}
+            onChange={(v) => set("team", v)}
+            items={TEAM_TABS}
           />
           <Field label="Generation" hideLabel>
             {({ id }) => (
@@ -96,7 +98,7 @@ export default function MembersPage() {
             Check the spelling or try another generation.
           </EmptyState>
         ) : (
-          <ul className={`member-grid ${res.status === "loading" ? "is-refreshing" : ""}`} key={`${search}-${generation}-${status}-${sort}`}>
+          <ul className={`member-grid ${res.status === "loading" ? "is-refreshing" : ""}`} key={`${search}-${generation}-${team}-${sort}`}>
             {res.data.map((m, k) => (
               <MemberCard key={m.slug} member={m} live={liveSet.has(m.slug)} index={k} />
             ))}

@@ -4,12 +4,13 @@ import { Flag, MemberPhoto, ShowArt } from "@/components/media/Media";
 import { ShowStatusBadge } from "@/components/domain/Badges";
 import { vtShow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
-import { Breadcrumb, ButtonLink, Callout, EmptyState, ErrorState, PreviewTag, Skeleton } from "@/components/ui";
+import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, PreviewTag, Skeleton } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { useEntrance } from "@/motion/hooks";
 import { api } from "@/services";
 import { formatDate, formatLongDate, formatTime } from "@/utils/format";
+import { teamLabel } from "@/utils/team";
 
 export default function ShowDetailPage() {
   const { slug = "" } = useParams();
@@ -17,8 +18,7 @@ export default function ShowDetailPage() {
   // Render what the schedule already delivered so the artwork morphs in instantly.
   const show = res.data ?? api.peekShow(slug);
   const d = res.data;
-  const all = useResource(() => api.listShows(), []);
-  const sameSetlist = (all.data ?? []).filter((x) => show && x.setlist === show.setlist && x.slug !== slug).slice(0, 4);
+  const sameTitle = d?.sameTitle ?? [];
   useDocumentTitle(show ? `${show.title} · ${formatDate(show.startsAt)}` : "Theater show");
   const info = useRef<HTMLDivElement>(null);
   useEntrance(info, [!!show, slug]);
@@ -48,7 +48,8 @@ export default function ShowDetailPage() {
               <>
                 <div className="show-hero__badges" data-in>
                   <ShowStatusBadge status={show.status} />
-                  <PreviewTag>Sample schedule</PreviewTag>
+                  <Badge>{teamLabel(show.team)}</Badge>
+                  {show.birthdayShow && <Flag tone="ink">BIRTHDAY SHOW</Flag>}
                 </div>
                 <h1 className="h-page" data-in>
                   {show.title}
@@ -60,29 +61,28 @@ export default function ShowDetailPage() {
                   </div>
                   <div>
                     <dt>Time</dt>
-                    <dd className="mono">{formatTime(show.startsAt)} WIB</dd>
+                    <dd className="mono">
+                      {formatTime(show.startsAt)}–{formatTime(show.endsAt)} WIB
+                    </dd>
                   </div>
                   <div>
-                    <dt>Venue</dt>
-                    <dd>{show.venue}</dd>
+                    <dt>Code</dt>
+                    <dd className="mono">{show.code}</dd>
                   </div>
                   <div>
                     <dt>Lineup</dt>
                     <dd>{show.lineup.length ? `${show.lineup.length} members` : "Not announced"}</dd>
                   </div>
                 </dl>
-                <p className="lead" data-in>
-                  {show.description}
-                </p>
-                {show.note && <Callout tone={show.status === "cancelled" ? "danger" : "info"}>{show.note}</Callout>}
+                <PreviewTag>From a sample jkt48connect.com theater response</PreviewTag>
                 <div className="actions-row">
                   <ShareButton />
                 </div>
-                {sameSetlist.length > 0 && (
+                {sameTitle.length > 0 && (
                   <div className="other-dates" data-in>
-                    <h2 className="meta">Other dates for {show.setlist}</h2>
+                    <h2 className="meta">Other dates for {show.title}</h2>
                     <ul>
-                      {sameSetlist.map((x) => (
+                      {sameTitle.map((x) => (
                         <li key={x.slug}>
                           <Link to={`/theater/${x.slug}`} viewTransition className="other-dates__row">
                             <span className="num">{formatDate(x.startsAt, { year: undefined })}</span>
@@ -110,39 +110,27 @@ export default function ShowDetailPage() {
             <h2 id="lineup-title" className="h-section">
               Lineup
             </h2>
-            {d && d.lineupDetail.length > 0 && <span className="meta">{d.lineupDetail.length} members</span>}
+            {d && d.lineupMembers.length > 0 && <span className="meta">{d.lineupMembers.length} members</span>}
           </div>
           {!d ? (
             <Skeleton height={260} />
-          ) : d.lineupDetail.length === 0 ? (
+          ) : d.lineupMembers.length === 0 ? (
             <EmptyState icon="users" title="Lineup not announced yet">
               It usually appears closer to the show date.
             </EmptyState>
           ) : (
             <ul className="lineup-grid">
-              {[...d.lineupDetail]
-                .sort((a, b) => (a.role === "center" ? -1 : b.role === "center" ? 1 : 0))
-                .map((l) => (
-                  <li key={l.member.slug}>
-                    <Link to={`/members/${l.member.slug}`} viewTransition className="lineup-member">
-                      <span className="lineup-member__photo">
-                        <MemberPhoto member={l.member} />
-                        {l.role === "center" && (
-                          <Flag tone="ink" className="card-flag">
-                            CENTER
-                          </Flag>
-                        )}
-                        {l.role === "unit" && (
-                          <Flag tone="light" className="card-flag">
-                            UNIT
-                          </Flag>
-                        )}
-                      </span>
-                      <span className="lineup-member__name">{l.member.nickname}</span>
-                      <span className="meta">Gen {l.member.generation}</span>
-                    </Link>
-                  </li>
-                ))}
+              {d.lineupMembers.map((m) => (
+                <li key={m.slug}>
+                  <Link to={`/members/${m.slug}`} viewTransition className="lineup-member">
+                    <span className="lineup-member__photo">
+                      <MemberPhoto member={m} />
+                    </span>
+                    <span className="lineup-member__name">{m.nickname}</span>
+                    <span className="meta">{m.generation !== null ? `Gen ${m.generation}` : teamLabel(m.team)}</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           )}
         </section>

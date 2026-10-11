@@ -15,10 +15,13 @@ export default function AboutPage() {
           </p>
           <h2>The data you see right now</h2>
           <p>
-            The site is in <strong>preview</strong>. Every member, show, lineup, stream and article is <strong>sample data</strong> used to build and test the interface. Names
-            are fictional and photo slots show initials instead of real photos. Nothing here is live or official.
+            Members, streams, theater shows, birthdays and news come from a <strong>sample snapshot</strong> of the{" "}
+            <a className="link" href="https://jkt48connect.com" target="_blank" rel="noreferrer noopener">
+              jkt48connect.com
+            </a>{" "}
+            API, taken on 10–11 October 2026. The site replays that snapshot at 23:20 WIB on 10 October, so “live now” means live at that moment — not right now.
           </p>
-          <p>When a verified source is connected, sample records are replaced. Live status and stream links will only appear when they come from that source.</p>
+          <p>Photos and posters load from the API’s image proxy. News items link to the full announcement on jkt48.com.</p>
           <h2>Privacy</h2>
           <p>There are no accounts and no tracking. Your theme choice is saved in your browser and never leaves your device.</p>
         </div>

@@ -1,34 +1,36 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LivePlatform, LiveStream, Member, TheaterShow } from "@/types";
 import { cx } from "@/utils/format";
+import { teamColor } from "@/utils/team";
 
 /*
- * Media slots. A real image URL renders as-is. Without one we show a
- * "name card" — the member's oshi colour, her name set large and a penlight
- * strip — the way official idol sites use member colours. It is plainly a
- * name card, not an imitation photo.
+ * Media slots. Images come from the source (proxied by jkt48connect.com).
+ * If one is missing or fails to load, a quiet tinted tile with initials
+ * takes its place — never an imitation photo.
  */
 
+/** Accent colour of a member (team based — a site design choice). */
 export const oshi = (m: Pick<Member, "color">) => ({ ["--oshi" as string]: m.color }) as CSSProperties;
-const tint = (hue: number) => ({ ["--h" as string]: hue }) as CSSProperties;
 
-export function MemberPhoto({ member, className, style, compact }: { member: Member; className?: string; style?: CSSProperties; compact?: boolean }) {
-  if (member.photoUrl) {
-    return <img className={cx("media", className)} src={member.photoUrl} alt={member.name} loading="lazy" decoding="async" style={style} />;
-  }
+function Img({ src, alt, fallback, className, eager }: { src?: string; alt: string; fallback: ReactNode; className?: string; eager?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <>{fallback}</>;
+  return <img className={className} src={src} alt={alt} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
+export function MemberPhoto({ member, className, style, eager }: { member: Member; className?: string; style?: CSSProperties; eager?: boolean; compact?: boolean }) {
   return (
-    <span className={cx("media nc", compact && "nc--compact", className)} style={{ ...oshi(member), ...style }} role="img" aria-label={`${member.name}, generation ${member.generation} (no photo yet)`}>
-      <span className="nc__gen" aria-hidden>
-        Gen {String(member.generation).padStart(2, "0")}
-      </span>
-      <span className="nc__nick" aria-hidden>
-        {member.nickname}
-      </span>
-      {!compact && (
-        <span className="nc__name" aria-hidden>
-          {member.name}
-        </span>
-      )}
+    <span className={cx("media mp", className)} style={{ ...oshi(member), ...style }}>
+      <Img
+        src={member.photoUrl}
+        alt={member.name}
+        eager={eager}
+        fallback={
+          <span className="mp__fallback" role="img" aria-label={`${member.name} (no photo)`}>
+            {member.nickname.slice(0, 2)}
+          </span>
+        }
+      />
     </span>
   );
 }
@@ -36,28 +38,40 @@ export function MemberPhoto({ member, className, style, compact }: { member: Mem
 export function Avatar({ member, size = 32, className }: { member: Member; size?: number; className?: string; ring?: boolean }) {
   return (
     <span className={cx("avatar", className)} style={{ width: size, height: size, ...oshi(member) }} aria-hidden>
-      {member.photoUrl ? <img src={member.photoUrl} alt="" loading="lazy" /> : <span style={{ fontSize: Math.round(size * 0.42) }}>{member.nickname[0]}</span>}
+      <Img src={member.photoUrl} alt="" fallback={<span style={{ fontSize: Math.round(size * 0.42) }}>{member.nickname[0]}</span>} />
     </span>
   );
 }
 
-export function ShowArt({ show, className }: { show: Pick<TheaterShow, "title" | "setlist" | "hue" | "posterUrl">; className?: string }) {
-  if (show.posterUrl) return <img className={cx("media", className)} src={show.posterUrl} alt={`${show.title} poster`} loading="lazy" />;
+export function ShowArt({ show, className, banner }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; banner?: boolean }) {
   return (
-    <span className={cx("media sa", className)} style={tint(show.hue)} role="img" aria-label={`${show.title} (no poster yet)`}>
-      <span className="sa__kicker">Theater</span>
-      <span className="sa__title">{show.setlist}</span>
+    <span className={cx("media sa", className)} style={{ ["--oshi" as string]: teamColor(show.team) } as CSSProperties}>
+      <Img
+        src={banner ? show.bannerUrl ?? show.posterUrl : show.posterUrl}
+        alt={`${show.title} poster`}
+        fallback={
+          <span className="sa__fallback" role="img" aria-label={`${show.title} (no poster)`}>
+            <span className="sa__kicker">Theater</span>
+            <span className="sa__title">{show.title}</span>
+          </span>
+        }
+      />
     </span>
   );
 }
 
 export function StreamThumb({ stream, member, className }: { stream: Pick<LiveStream, "thumbnailUrl" | "title">; member: Member; className?: string }) {
-  if (stream.thumbnailUrl) return <img className={cx("media", className)} src={stream.thumbnailUrl} alt={stream.title} loading="lazy" />;
   return (
-    <span className={cx("media nc nc--thumb", className)} style={oshi(member)} role="img" aria-label={`${member.nickname} stream (no thumbnail)`}>
-      <span className="nc__nick" aria-hidden>
-        {member.nickname}
-      </span>
+    <span className={cx("media mp", className)} style={oshi(member)}>
+      <Img
+        src={stream.thumbnailUrl ?? member.photoUrl}
+        alt={`${member.nickname}: ${stream.title}`}
+        fallback={
+          <span className="mp__fallback" role="img" aria-label={`${member.nickname} stream (no thumbnail)`}>
+            {member.nickname.slice(0, 2)}
+          </span>
+        }
+      />
     </span>
   );
 }
@@ -66,7 +80,7 @@ export function PlatformMark({ platform }: { platform: LivePlatform }) {
   return <span className={cx("platform", platform === "IDN Live" ? "platform--idn" : "platform--sr")}>{platform}</span>;
 }
 
-/** Rectangular status flag on a card: LIVE, CENTER, UNIT. */
+/** Small status flag on a card: LIVE, BIRTHDAY, … */
 export function Flag({ tone = "ink", children, className }: { tone?: "live" | "ink" | "light"; children: ReactNode; className?: string }) {
   return <span className={cx("flag", `flag--${tone}`, className)}>{children}</span>;
 }

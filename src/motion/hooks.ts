@@ -1,5 +1,5 @@
 import type { DependencyList, RefObject } from "react";
-import { gsap, reducedMotion, ScrollTrigger, useGSAP } from "./gsap";
+import { gsap, ScrollTrigger, shift, useGSAP } from "./gsap";
 
 /**
  * Stagger the direct children of `ref` in when they scroll into view.
@@ -10,10 +10,10 @@ export function useStagger(ref: RefObject<HTMLElement | null>, deps: DependencyL
   useGSAP(
     () => {
       const el = ref.current;
-      if (!el || reducedMotion() || el.children.length === 0) return;
+      if (!el || el.children.length === 0) return;
       gsap.from(el.children, {
         autoAlpha: 0,
-        y: opts.y ?? 18,
+        y: shift(opts.y ?? 18),
         duration: 0.7,
         stagger: { each: opts.each ?? 0.05, amount: Math.min(0.6, (opts.each ?? 0.05) * el.children.length) },
         scrollTrigger: { trigger: el, start: opts.start ?? "top 90%", once: true },
@@ -32,12 +32,12 @@ export function useSectionReveal(ref: RefObject<HTMLElement | null>, deps: Depen
   useGSAP(
     () => {
       const el = ref.current;
-      if (!el || reducedMotion()) return;
+      if (!el) return;
       const tl = gsap.timeline({ scrollTrigger: { trigger: el, start: "top 82%", once: true } });
       const heading = el.querySelector(".h-section__inner");
-      if (heading) tl.from(heading, { yPercent: 110, duration: 0.8, ease: "power4.out" });
+      if (heading) tl.from(heading, shift(1) ? { yPercent: 110, duration: 0.8, ease: "power4.out" } : { autoAlpha: 0, duration: 0.5 });
       const rest = el.querySelectorAll("[data-reveal]");
-      if (rest.length) tl.from(rest, { autoAlpha: 0, y: 20, duration: 0.7, stagger: 0.08, clearProps: "transform,opacity,visibility" }, heading ? "-=0.5" : 0);
+      if (rest.length) tl.from(rest, { autoAlpha: 0, y: shift(20), duration: 0.7, stagger: 0.08, clearProps: "transform,opacity,visibility" }, heading ? "-=0.5" : 0);
     },
     { scope: ref, dependencies: [...deps] },
   );
@@ -56,14 +56,14 @@ export function usePageMotion(root: RefObject<HTMLElement | null>, key: string) 
   useGSAP(
     () => {
       const el = root.current;
-      if (!el || reducedMotion()) return;
+      if (!el) return;
       const seen = new WeakSet<Element>();
       const triggers: ScrollTrigger[] = [];
       const scan = () => {
         const fresh = [...el.querySelectorAll(LIST_ITEMS)].filter((n) => !seen.has(n) && !n.closest(".home"));
         if (!fresh.length) return;
         fresh.forEach((n) => seen.add(n));
-        gsap.set(fresh, { autoAlpha: 0, y: 18 });
+        gsap.set(fresh, { autoAlpha: 0, y: shift(18) });
         triggers.push(
           ...ScrollTrigger.batch(fresh, {
             start: "top 95%",
@@ -89,9 +89,9 @@ export function useEntrance(ref: RefObject<HTMLElement | null>, deps: Dependency
   useGSAP(
     () => {
       const el = ref.current;
-      if (!el || reducedMotion()) return;
+      if (!el) return;
       const items = el.querySelectorAll("[data-in]");
-      if (items.length) gsap.from(items, { autoAlpha: 0, y: 16, duration: 0.6, stagger: 0.07, delay: 0.1, clearProps: "transform,opacity,visibility" });
+      if (items.length) gsap.from(items, { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.07, delay: 0.1, clearProps: "transform,opacity,visibility" });
     },
     { scope: ref, dependencies: [...deps] },
   );

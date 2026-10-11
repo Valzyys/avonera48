@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { Avatar } from "@/components/media/Media";
 import { NewsRow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
-import { Badge, Breadcrumb, ButtonLink, Callout, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, Icon, Skeleton } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { useEntrance } from "@/motion/hooks";
@@ -52,14 +52,13 @@ export default function NewsDetailPage() {
               <h1 className="h-page" data-in>
                 {d.article.title}
               </h1>
-              <p className="lead article__summary" data-in>
-                {d.article.summary}
-              </p>
-              <div className="article__body prose" data-in>
-                <Callout title="Placeholder article">This is preview content. It is not an official JKT48 announcement.</Callout>
-                {d.article.body.map((p, k) => (
-                  <p key={k}>{p}</p>
-                ))}
+              <div className="article__source" data-in>
+                <p className="lead">The full announcement is published on the official JKT48 website.</p>
+                <a className="btn btn--primary btn--md" href={d.article.url} target="_blank" rel="noreferrer noopener">
+                  <span className="btn__label">Read on jkt48.com</span>
+                  <Icon name="arrowUpRight" size={16} />
+                </a>
+                <p className="meta">Headline from a sample jkt48connect.com news response.</p>
               </div>
               {d.related.length > 0 && (
                 <section className="article__related" aria-labelledby="related-t">
@@ -78,7 +77,7 @@ export default function NewsDetailPage() {
                   </ul>
                 </section>
               )}
-              <div className="actions-row" style={{ marginTop: 24 }}>
+              <div className="actions-row">
                 <ShareButton />
               </div>
             </>

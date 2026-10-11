@@ -1,18 +1,20 @@
 import { PlatformMark, StreamThumb } from "@/components/media/Media";
 import { LiveFor } from "./Cards";
-import { Button, Callout, Dialog } from "@/components/ui";
+import { Button, Dialog } from "@/components/ui";
 import { api, type LiveItem } from "@/services";
 import { formatDateTime, formatDuration, formatRelative } from "@/utils/format";
 import { Link } from "react-router";
 
 /**
- * Stream details + the outbound action. Preview records carry no URL, so the
+ * Stream details + the outbound action. When the source has no stream URL the
  * "Open" action is disabled with an explanation instead of linking somewhere
  * that does not exist.
  */
 export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onClose: () => void }) {
   const live = stream?.status === "live";
-  const href = live ? stream?.url : stream?.replayUrl;
+  // Prefer the stream's own link, then a replay, then the member's room on that platform.
+  const room = stream && (stream.platform === "IDN Live" ? (stream.member.idnUsername ? `https://www.idn.app/${stream.member.idnUsername}` : null) : stream.member.socials.find((x) => x.title === "SHOWROOM")?.url);
+  const href = stream ? (stream.url ?? (live ? room : stream.replayUrl)) : null;
   return (
     <Dialog
       open={!!stream}
@@ -27,10 +29,10 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
             </Button>
             {href ? (
               <a className="btn btn--primary btn--md" href={href} target="_blank" rel="noreferrer noopener">
-                <span className="btn__label">{live ? `Watch on ${stream.platform}` : "Watch replay"}</span>
+                <span className="btn__label">{live ? `Open on ${stream.platform}` : "Watch replay"}</span>
               </a>
             ) : (
-              <Button variant="primary" disabled title="Not available in preview data">
+              <Button variant="primary" disabled title="The source has no link for this stream">
                 {live ? `Watch on ${stream.platform}` : "No replay available"}
               </Button>
             )}
@@ -79,9 +81,7 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
               </dd>
             </div>
           </dl>
-          <Callout title="Sample data">
-            This stream isn&rsquo;t real. Links to {stream.platform} appear here once Avonera48 is connected to a live source.
-          </Callout>
+          <p className="meta">From a sample jkt48connect.com response, replayed at 23:20 WIB on 10 Oct 2026.</p>
         </div>
       )}
     </Dialog>

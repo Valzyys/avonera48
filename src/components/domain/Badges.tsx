@@ -4,7 +4,6 @@ import type { MemberStatus, ShowStatus } from "@/types";
 const show: Record<ShowStatus, [string, Tone]> = {
   upcoming: ["Upcoming", "info"],
   completed: ["Completed", "neutral"],
-  cancelled: ["Cancelled", "danger"],
 };
 
 export function ShowStatusBadge({ status }: { status: ShowStatus }) {

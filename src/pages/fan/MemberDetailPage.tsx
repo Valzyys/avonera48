@@ -8,8 +8,10 @@ import { StreamDialog } from "@/components/domain/StreamDialog";
 import { Badge, Breadcrumb, Button, ButtonLink, EmptyState, ErrorState, Icon, PreviewTag, Skeleton, Tabs } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
-import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { gsap, shift, useGSAP } from "@/motion/gsap";
 import { api, type LiveItem } from "@/services";
+import { compact, formatDate } from "@/utils/format";
+import { teamLabel } from "@/utils/team";
 
 type Tab = "shows" | "lives" | "news";
 
@@ -27,8 +29,8 @@ export default function MemberDetailPage() {
   // Profile text arrives line by line beside the (morphing) name card.
   useGSAP(
     () => {
-      if (!m || reducedMotion()) return;
-      gsap.from(".profile__info > *", { autoAlpha: 0, y: 16, duration: 0.6, stagger: 0.06, delay: 0.15, clearProps: "transform,opacity,visibility" });
+      if (!m) return;
+      gsap.from(".profile__info > *", { autoAlpha: 0, y: shift(16), duration: 0.6, stagger: 0.06, delay: 0.15, clearProps: "transform,opacity,visibility" });
     },
     { scope: info, dependencies: [!!m, slug] },
   );
@@ -60,40 +62,43 @@ export default function MemberDetailPage() {
             {m ? (
               <>
                 <div className="profile__badges">
-                  <Badge>Generation {m.generation}</Badge>
-                  <MemberStatusBadge status={m.status} />
+                  <Badge>{teamLabel(m.team)}</Badge>
+                  {m.generation !== null && <Badge>Generation {m.generation}</Badge>}
+                  {m.status !== "active" && <MemberStatusBadge status={m.status} />}
                 </div>
-                <h1 className="h-page">
-                  {m.name}
-                </h1>
-                <p className="profile__nick">
-                  {m.nickname}
-                </p>
+                <h1 className="h-page">{m.nickname}</h1>
+                <p className="profile__nick">{m.name}</p>
                 <dl className="facts">
                   <div>
-                    <dt>Joined</dt>
-                    <dd className="num">{m.joinedYear}</dd>
+                    <dt>Birthday</dt>
+                    <dd className="num">{m.birthday ? formatDate(`${m.birthday}T12:00:00+07:00`, { day: "numeric", month: "short", year: undefined }) : "–"}</dd>
                   </div>
                   <div>
-                    <dt>Shows</dt>
-                    <dd className="num">{d ? d.shows.length : "–"}</dd>
-                  </div>
-                  <div>
-                    <dt>Upcoming</dt>
+                    <dt>Upcoming shows</dt>
                     <dd className="num">{d ? d.shows.filter((s) => s.status === "upcoming").length : "–"}</dd>
                   </div>
                   <div>
                     <dt>Recent streams</dt>
                     <dd className="num">{d ? d.recentLives.length : "–"}</dd>
                   </div>
+                  <div>
+                    <dt>Peak viewers</dt>
+                    <dd className="num">{d && d.recentLives.length ? compact.format(Math.max(...d.recentLives.map((l) => l.viewers ?? 0))) : "–"}</dd>
+                  </div>
                 </dl>
-                <div className="tag-list">
-                  {m.tags.map((t) => (
-                    <Badge key={t}>{t}</Badge>
-                  ))}
-                </div>
-                <p className="profile__bio">{m.bio}</p>
-                <PreviewTag>Placeholder profile — not official information</PreviewTag>
+                {m.socials.length > 0 && (
+                  <ul className="socials" aria-label="Official accounts">
+                    {m.socials.map((sc) => (
+                      <li key={sc.url}>
+                        <a href={sc.url} target="_blank" rel="noreferrer noopener" className="socials__link">
+                          {sc.title}
+                          <Icon name="arrowUpRight" size={13} />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <PreviewTag>Profile from a sample jkt48connect.com response</PreviewTag>
                 <div className="actions-row">
                   {d?.isLive && (
                     <Button variant="primary" icon="broadcast" onClick={() => setStream(d.isLive)}>
