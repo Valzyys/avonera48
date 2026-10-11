@@ -1,0 +1,301 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-h) + 16px);
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  /* faint dot grid — the page reads as a sheet, not a void */
+  background:
+    radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 1.2px) 0 0 / 22px 22px,
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--r-sm);
+}
+
+::selection {
+  background: var(--link-soft);
+  color: var(--text);
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-toast);
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  transform: translateY(-200%);
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.container {
+  width: 100%;
+  max-width: calc(var(--w) + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* ---------- type helpers ---------- */
+
+.h-page {
+  font-size: var(--fs-3xl);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+}
+
+.h-section {
+  font-size: var(--fs-xl);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.h-card {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.lead {
+  font-size: var(--fs-md);
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.muted {
+  color: var(--text-3);
+}
+
+.small {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.meta {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ============ Motion ============
+   Two kinds only:
+   - .enter: list/grid items fade + rise 8px on mount, staggered by --i.
+     Re-keying a list (e.g. after a filter change) replays it.
+   - .reveal: section content fades + rises once when scrolled into view.
+   Both use opacity/transform only. */
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.enter {
+  animation: enter var(--t-slow) var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 12) * var(--stagger));
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 600ms var(--ease),
+    transform 600ms var(--ease);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.page {
+  animation: fade var(--t-slow) var(--ease) both;
+}
+
+/* Route transitions (View Transitions API): quick cross-fade with a small
+   lift; shared photos/headers morph via their own view-transition-name. */
+.site-header {
+  view-transition-name: site-header;
+}
+
+::view-transition-old(root) {
+  animation: vt-out 160ms var(--ease-inout) both;
+}
+
+::view-transition-new(root) {
+  animation: vt-in 300ms var(--ease) 40ms both;
+}
+
+::view-transition-group(*) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--ease-inout);
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+.no-js .reveal {
+  opacity: 1;
+  transform: none;
+}
+
+/* Theme switch: cross-fade colors only during the swap. */
+.theme-swap *,
+.theme-swap *::before,
+.theme-swap *::after {
+  transition:
+    background-color 300ms var(--ease),
+    border-color 300ms var(--ease),
+    color 300ms var(--ease) !important;
+}

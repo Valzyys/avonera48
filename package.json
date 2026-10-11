@@ -1,0 +1,40 @@
+{
+  "name": "avonera48",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^7.18.4",
+    "sonner": "^2.0.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261011.1",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.149.0"
+  }
+}

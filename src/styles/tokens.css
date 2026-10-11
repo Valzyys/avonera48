@@ -1,0 +1,157 @@
+/* Avonera48 — design tokens.
+   A utility-first fan site: neutral warm-white surfaces, near-black text,
+   one accent reserved for "live", and a blue used only for links/focus.
+   Hierarchy comes from type weight, size and spacing — not decoration.
+   Light is the default theme; dark is a full secondary theme. */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #efede8;
+  --surface-3: #e5e2db;
+
+  /* text (contrast on --bg: 16.9 / 7.9 / 5.2) */
+  --text: #141413;
+  --text-2: #4f4c46;
+  --text-3: #6b675f;
+  --text-4: #a29d93; /* disabled / decorative only */
+
+  /* accents */
+  --live: #c81e35;        /* live status only */
+  --live-soft: #fbe7ea;
+  --link: #1f4fd1;        /* links, focus, selection */
+  --link-soft: #e3eafb;
+  --ok: #1f7a45;
+  --warn: #8f5a00;
+  --danger: #b4232c;
+
+  /* lines */
+  --line: rgba(20, 20, 19, 0.1);
+  --line-2: rgba(20, 20, 19, 0.18);
+  --line-3: rgba(20, 20, 19, 0.32);
+  --hover: rgba(20, 20, 19, 0.04);
+  --grid-dot: rgba(20, 20, 19, 0.075);
+
+  /* placeholder media (photo slots before real images exist) */
+  --ph-sat: 22%;
+  --ph-light: 86%;
+  --ph-ink: rgba(20, 20, 19, 0.62);
+
+  /* component-level */
+  --header-bg: rgba(246, 245, 242, 0.88);
+  --overlay: rgba(20, 20, 19, 0.4);
+  --btn-bg: #141413;
+  --btn-bg-hover: #2b2a27;
+  --btn-fg: #ffffff;
+  --shadow-1: 0 1px 2px rgba(20, 20, 19, 0.06);
+  --shadow-2: 0 2px 4px rgba(20, 20, 19, 0.04), 0 8px 24px -8px rgba(20, 20, 19, 0.16);
+  --shadow-3: 0 24px 64px -16px rgba(20, 20, 19, 0.28);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--link);
+
+  /* type */
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --fs-xs: 0.75rem;     /* 12 */
+  --fs-sm: 0.8125rem;   /* 13 */
+  --fs-base: 0.9375rem; /* 15 */
+  --fs-md: 1.0625rem;   /* 17 */
+  --fs-lg: 1.25rem;     /* 20 */
+  --fs-xl: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
+  --fs-2xl: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
+  --fs-3xl: clamp(2.25rem, 1.6rem + 2.8vw, 3.75rem);
+
+  /* spacing (4px grid) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+  --section: clamp(48px, 32px + 4vw, 96px);
+
+  /* shape */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-full: 999px;
+
+  /* motion: short, consistent, no bounce except toggles */
+  --t-fast: 140ms;
+  --t-base: 220ms;
+  --t-slow: 420ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --stagger: 40ms;
+
+  /* layout */
+  --w: 1240px;
+  --w-prose: 680px;
+  --gutter: clamp(16px, 8px + 2.4vw, 40px);
+  --header-h: 60px;
+
+  /* z */
+  --z-header: 200;
+  --z-overlay: 400;
+  --z-toast: 600;
+  /* breakpoints (reference): 480 · 768 · 1024 · 1280 */
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #121211;
+  --surface: #1a1a18;
+  --surface-2: #22221f;
+  --surface-3: #2c2c28;
+
+  --text: #f1f0ec;
+  --text-2: #bdb9b0;
+  --text-3: #9a968d;
+  --text-4: #5f5c56;
+
+  --live: #ff5a6e;
+  --live-soft: #3a1a20;
+  --link: #8fb0ff;
+  --link-soft: #1f2a45;
+  --ok: #6fcf97;
+  --warn: #e9b45c;
+  --danger: #ff7b82;
+
+  --line: rgba(241, 240, 236, 0.09);
+  --line-2: rgba(241, 240, 236, 0.16);
+  --line-3: rgba(241, 240, 236, 0.3);
+  --hover: rgba(241, 240, 236, 0.04);
+  --grid-dot: rgba(241, 240, 236, 0.06);
+
+  --ph-sat: 16%;
+  --ph-light: 26%;
+  --ph-ink: rgba(241, 240, 236, 0.7);
+
+  --header-bg: rgba(18, 18, 17, 0.86);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --btn-bg: #f1f0ec;
+  --btn-bg-hover: #ffffff;
+  --btn-fg: #141413;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --shadow-3: 0 24px 64px -16px rgba(0, 0, 0, 0.75);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 1ms;
+    --t-base: 1ms;
+    --t-slow: 1ms;
+    --stagger: 0ms;
+  }
+}
