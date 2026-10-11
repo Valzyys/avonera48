@@ -8,7 +8,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { enter, gsap, useGSAP } from "@/motion/gsap";
 import { api } from "@/services";
-import { cx, formatTime, formatWeekday } from "@/utils/format";
+import { cx, formatDate, formatTime, formatWeekday } from "@/utils/format";
 
 type Mode = "login" | "register";
 
@@ -23,138 +23,203 @@ export function RegisterPage() {
   return <AuthPage mode="register" />;
 }
 
+/** A small stable hash, for the ticket's seat and barcode (decoration only). */
+function hash(s: string) {
+  let h = 2166136261;
+  for (let k = 0; k < s.length; k++) h = Math.imul(h ^ s.charCodeAt(k), 16777619);
+  return h >>> 0;
+}
+
+/*
+ * The sign-in page is a theater ticket: the form is printed on the ticket,
+ * the stub on its left fills in as you type (name, seat, barcode), and a
+ * successful sign-in tears the stub off before entering the room.
+ */
 function AuthPage({ mode }: { mode: Mode }) {
   useDocumentTitle(mode === "login" ? "Sign in" : "Create account");
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = safeNext(params.get("next"));
+  const root = useRef<HTMLDivElement>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const tearing = useRef(false);
 
-  // Already signed in: straight to where they were going.
+  // Already signed in (and not mid-animation): straight to where they were going.
   useEffect(() => {
-    if (user) navigate(next, { replace: true });
+    if (user && !tearing.current) navigate(next, { replace: true });
   }, [user, next, navigate]);
 
+  useGSAP(
+    () => {
+      const tl = gsap.timeline();
+      enter(".ticket", { autoAlpha: 0, y: 60, rotate: -3, duration: 1.1, ease: "power4.out" }, tl);
+      enter(".stub__row", { autoAlpha: 0, x: -14, duration: 0.6, stagger: 0.06 }, tl, "-=0.6");
+      enter(".auth-top > *", { autoAlpha: 0, y: -10, duration: 0.6, stagger: 0.08 }, tl, 0.1);
+    },
+    { scope: root },
+  );
+
+  /** Tear the stub off, then go in. */
+  const onSuccess = () => {
+    tearing.current = true;
+    const tl = gsap.timeline({ onComplete: () => navigate(next, { replace: true }) });
+    // Drop the notch mask so the stub can leave the ticket's outline.
+    tl.set(".ticket", { maskImage: "none", webkitMaskImage: "none" })
+      .to(".ticket__main", { autoAlpha: 0, y: 12, duration: 0.35, ease: "power2.in" })
+      .to(".ticket__stub", { rotate: -9, x: -18, y: 10, duration: 0.35, ease: "power2.out" }, "<")
+      .to(".ticket__stub", { y: "110vh", rotate: -24, duration: 0.8, ease: "power3.in" });
+  };
+
   return (
-    <div className="auth">
-      <Stage mode={mode} />
-      <main className="auth__panel" id="main">
-        <div className="auth__panel-top">
-          <Link to="/" className="auth__back">
-            <Icon name="arrowLeft" size={16} />
-            Back to site
-          </Link>
+    <div className="auth" ref={root}>
+      <Marquee />
+      <header className="auth-top">
+        <Link to="/" className="auth-top__logo" aria-label="Avonera48 home">
+          <LogoMark size={28} />
+          <span>
+            Avonera<span className="muted">48</span>
+          </span>
+        </Link>
+        <Link to="/" className="auth-top__back">
+          <Icon name="arrowLeft" size={16} />
+          Back to site
+        </Link>
+      </header>
+
+      <main className="auth__stage" id="main">
+        <div className="ticket-shadow">
+          <div className="ticket">
+            <Stub mode={mode} name={name} email={email} />
+            <div className="ticket__main">
+              <AuthForm key={mode} mode={mode} name={name} email={email} setName={setName} setEmail={setEmail} onSuccess={onSuccess} />
+            </div>
+          </div>
         </div>
-        <AuthForm key={mode} mode={mode} next={next} />
         <p className="auth__legal">Avonera48 is an unofficial fan project and is not affiliated with JKT48.</p>
       </main>
     </div>
   );
 }
 
-/* ---------- the stage (left panel) ---------- */
+/* ---------- background: two slow rows of members ---------- */
 
-function Stage({ mode }: { mode: Mode }) {
-  const ref = useRef<HTMLElement>(null);
+function Marquee() {
+  const ref = useRef<HTMLDivElement>(null);
   const members = useResource(() => api.listMembers({ sort: "generation" }), []);
-  const shows = useResource(() => api.listShows("upcoming"), []);
   const faces = useMemo(() => (members.data ?? []).filter((m) => m.status !== "graduated"), [members.data]);
-  const columns = useMemo(() => [0, 1, 2].map((c) => faces.filter((_, k) => k % 3 === c)), [faces]);
-  const show = shows.data?.[0];
+  const rows = useMemo(() => [faces.filter((_, k) => k % 2 === 0), faces.filter((_, k) => k % 2 === 1)], [faces]);
 
   useGSAP(
     () => {
-      // Portrait columns drift in opposite directions, like a slow curtain of faces.
-      gsap.utils.toArray<HTMLElement>(".stage__col-track").forEach((track, k) => {
-        const dir = k % 2 ? 1 : -1;
-        gsap.fromTo(track, { yPercent: dir > 0 ? -50 : 0 }, { yPercent: dir > 0 ? 0 : -50, duration: 60 + k * 12, ease: "none", repeat: -1 });
+      gsap.utils.toArray<HTMLElement>(".auth-marquee__track").forEach((t, k) => {
+        gsap.fromTo(t, { xPercent: k ? -50 : 0 }, { xPercent: k ? 0 : -50, duration: 90, ease: "none", repeat: -1 });
       });
-      gsap.to(".stage__beam", { rotate: (k) => (k % 2 ? -14 : 14), duration: (k) => 6 + k * 1.7, ease: "sine.inOut", yoyo: true, repeat: -1 });
     },
     { scope: ref, dependencies: [faces.length] },
   );
 
-  useGSAP(
-    () => {
-      enter(".stage__line-inner", { yPercent: 110, duration: 1, ease: "power4.out", stagger: 0.08 });
-      enter(".stage__kicker, .stage__foot", { autoAlpha: 0, y: 10, duration: 0.7, stagger: 0.1, delay: 0.3 });
-    },
-    { scope: ref, dependencies: [mode], revertOnUpdate: true },
+  return (
+    <div className="auth-marquee" ref={ref} aria-hidden>
+      {rows.map((row, k) => (
+        <div className={`auth-marquee__row auth-marquee__row--${k ? "b" : "a"}`} key={k}>
+          <div className="auth-marquee__track">
+            {[...row, ...row].map((m, j) => (
+              <MemberPhoto key={`${m.slug}-${j}`} member={m} className="auth-marquee__face" />
+            ))}
+          </div>
+        </div>
+      ))}
+      <span className="auth-marquee__word">AVONERA48</span>
+    </div>
   );
+}
 
-  const lines = mode === "login" ? ["Your seat", "is waiting."] : ["Take your", "seat."];
+/* ---------- the stub ---------- */
+
+const ROWS = "ABCDEFGHJK";
+
+function Stub({ mode, name, email }: { mode: Mode; name: string; email: string }) {
+  const shows = useResource(() => api.listShows("upcoming"), []);
+  const show = shows.data?.[0];
+  const key = (email || name).trim().toLowerCase();
+  const h = hash(key || "avonera48");
+  const seat = key ? `${ROWS[h % ROWS.length]}–${String((h >>> 8) % 30 + 1).padStart(2, "0")}` : "— —";
+  const serial = key ? String(h % 100000).padStart(5, "0") : "00048";
+  // 46 bars whose widths come from the hash, so every viewer gets their own code.
+  const bars = Array.from({ length: 46 }, (_, k) => 1 + ((h >>> (k % 27)) & 3));
 
   return (
-    <aside className="stage" ref={ref} aria-label="Avonera48">
-      <div className="stage__wall" aria-hidden>
-        {columns.map((col, k) => (
-          <div className="stage__col" key={k}>
-            <div className="stage__col-track">
-              {[...col, ...col].map((m, j) => (
-                <MemberPhoto key={`${m.slug}-${j}`} member={m} className="stage__face" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="stage__shade" aria-hidden />
-      <span className="stage__beam stage__beam--a" aria-hidden />
-      <span className="stage__beam stage__beam--b" aria-hidden />
-      <span className="stage__beam stage__beam--c" aria-hidden />
-
-      <Link to="/" className="stage__logo" aria-label="Avonera48 home">
-        <LogoMark size={30} />
-        <span>
-          Avonera<span className="stage__logo-48">48</span>
+    <aside className="ticket__stub" aria-label="Your ticket">
+      <div className="stub__row stub__head">
+        <span className="stub__admit">Admit one</span>
+        <span className="stub__bars" aria-hidden>
+          <i />
+          <i />
+          <i />
+          <i />
         </span>
-      </Link>
-
-      <div className="stage__copy">
-        <p className="stage__kicker">Members’ theater room</p>
-        <h2 className="stage__title">
-          {lines.map((l, k) => (
-            <span className="stage__line" key={l}>
-              <span className={cx("stage__line-inner", k === lines.length - 1 && "stage__line-inner--outline")}>{l}</span>
+      </div>
+      <div className="stub__row stub__title">
+        <span>Theater</span>
+        <span className="stub__title-outline">Room</span>
+      </div>
+      <dl className="stub__row stub__facts">
+        <div className="stub__fact stub__fact--wide">
+          <dt>Name on ticket</dt>
+          <dd className={cx(!(mode === "register" ? name : email).trim() && "is-empty")}>{mode === "register" ? name.trim() || "Your name" : email.trim().split("@")[0] || "Your name"}</dd>
+        </div>
+        <div className="stub__fact">
+          <dt>Seat</dt>
+          <dd className="mono">{seat}</dd>
+        </div>
+        <div className="stub__fact">
+          <dt>Gate</dt>
+          <dd className="mono">48</dd>
+        </div>
+        <div className="stub__fact stub__fact--wide">
+          <dt>Next on stage</dt>
+          <dd>{show ? show.title : "—"}</dd>
+          {show && (
+            <span className="stub__when">
+              {formatWeekday(show.startsAt)} {formatDate(show.startsAt, { year: undefined })} · {formatTime(show.startsAt)} WIB
             </span>
+          )}
+        </div>
+      </dl>
+      <div className="stub__row stub__code">
+        <span className="stub__barcode" aria-hidden>
+          {bars.map((w, k) => (
+            <i key={k} style={{ width: w }} />
           ))}
-        </h2>
-      </div>
-
-      <div className="stage__foot">
-        {show ? (
-          <div className="stage__show">
-            <span className="stage__show-dot" aria-hidden />
-            <span>
-              <span className="stage__show-label">Next on stage</span>
-              <span className="stage__show-title">{show.title}</span>
-              <span className="stage__show-time">
-                {formatWeekday(show.startsAt)} · {formatTime(show.startsAt)} WIB
-              </span>
-            </span>
-          </div>
-        ) : (
-          <span />
-        )}
-        <span className="stage__bar" aria-hidden>
-          <i />
-          <i />
-          <i />
-          <i />
         </span>
+        <span className="stub__serial mono">AVN·{serial}</span>
       </div>
     </aside>
   );
 }
 
-/* ---------- the form (right panel) ---------- */
+/* ---------- the form ---------- */
 
-function AuthForm({ mode, next }: { mode: Mode; next: string }) {
+function AuthForm({
+  mode,
+  name,
+  email,
+  setName,
+  setEmail,
+  onSuccess,
+}: {
+  mode: Mode;
+  name: string;
+  email: string;
+  setName: (v: string) => void;
+  setEmail: (v: string) => void;
+  onSuccess: () => void;
+}) {
   const { login, register } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const ref = useRef<HTMLDivElement>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
@@ -162,7 +227,7 @@ function AuthForm({ mode, next }: { mode: Mode; next: string }) {
 
   useGSAP(
     () => {
-      enter(".auth-form > *", { autoAlpha: 0, y: 16, duration: 0.65, stagger: 0.06, clearProps: "transform,opacity,visibility" });
+      enter(".auth-form > *", { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.05, delay: 0.25, clearProps: "transform,opacity,visibility" });
     },
     { scope: ref },
   );
@@ -187,56 +252,59 @@ function AuthForm({ mode, next }: { mode: Mode; next: string }) {
     try {
       if (mode === "login") await login(email.trim(), password);
       else await register(name.trim(), email.trim(), password);
-      navigate(next, { replace: true });
+      onSuccess();
     } catch (err) {
-      const e2 = err instanceof AuthError ? err : new AuthError("Something went wrong. Try again.");
-      setError(e2);
-      gsap.fromTo(".auth-form__alert, .auth-form [aria-invalid='true']", { x: -6 }, { x: 0, duration: 0.5, ease: "elastic.out(1, 0.3)" });
-    } finally {
+      setError(err instanceof AuthError ? err : new AuthError("Something went wrong. Try again."));
       setBusy(false);
+      requestAnimationFrame(() => gsap.fromTo(".auth-form__alert, .auth-form [aria-invalid='true']", { x: -6 }, { x: 0, duration: 0.5, ease: "elastic.out(1, 0.3)" }));
     }
   };
 
   const keepNext = location.search;
+  const setupProblem = error?.code === "not_configured";
 
   return (
     <div className="auth-form-wrap" ref={ref}>
       <form className="auth-form" onSubmit={onSubmit} noValidate>
-        <nav className="auth-switch" aria-label="Account">
-          <span className={cx("auth-switch__pill", mode === "register" && "is-right")} aria-hidden />
+        <nav className="auth-tabs" aria-label="Account">
           <Link to={`/login${keepNext}`} replace className={cx(mode === "login" && "is-active")} aria-current={mode === "login" ? "page" : undefined}>
             Sign in
           </Link>
           <Link to={`/register${keepNext}`} replace className={cx(mode === "register" && "is-active")} aria-current={mode === "register" ? "page" : undefined}>
             Create account
           </Link>
+          <span className={cx("auth-tabs__line", mode === "register" && "is-right")} aria-hidden />
         </nav>
 
         <header className="auth-form__head">
-          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-          <p>{mode === "login" ? "Sign in to enter the theater room." : "One free account opens the theater room on every device."}</p>
+          <h1>{mode === "login" ? "Welcome back." : "Get your ticket."}</h1>
+          <p>{mode === "login" ? "Sign in and take your seat in the theater room." : "A free account opens the theater room on any device."}</p>
         </header>
 
         {error && !error.field && (
-          <p className="auth-form__alert" role="alert">
-            <Icon name="alert" size={16} />
-            {error.message}
+          <p className={cx("auth-form__alert", setupProblem && "is-setup")} role="alert">
+            <Icon name={setupProblem ? "settings" : "alert"} size={16} />
+            <span>{setupProblem ? "Sign-up is temporarily unavailable while accounts are being set up. Please try again later." : error.message}</span>
           </p>
         )}
 
-        {mode === "register" && (
-          <AuthField label="Name" icon="user" autoComplete="nickname" value={name} onChange={(e) => setName(e.target.value)} error={fieldError("name") ?? local.name} maxLength={40} />
-        )}
-        <AuthField label="Email" icon="mail" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fieldError("email") ?? local.email} />
-        <PasswordField mode={mode} value={password} onChange={setPassword} error={fieldError("password") ?? local.password} />
+        <div className="auth-form__fields">
+          {mode === "register" && (
+            <AuthField label="Name" icon="user" autoComplete="nickname" value={name} onChange={(e) => setName(e.target.value)} error={fieldError("name") ?? local.name} maxLength={40} />
+          )}
+          <AuthField label="Email" icon="mail" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fieldError("email") ?? local.email} />
+          <PasswordField mode={mode} value={password} onChange={setPassword} error={fieldError("password") ?? local.password} />
+        </div>
 
         <button type="submit" className="auth-submit" disabled={busy} aria-busy={busy || undefined}>
-          <span className="auth-submit__label">{busy ? (mode === "login" ? "Signing in…" : "Creating account…") : mode === "login" ? "Sign in" : "Create account"}</span>
-          {busy ? <span className="btn__spinner" aria-hidden /> : <Icon name="arrowRight" size={18} />}
+          <span>{busy ? (mode === "login" ? "Checking your ticket…" : "Printing your ticket…") : mode === "login" ? "Enter the room" : "Get my ticket"}</span>
+          <span className="auth-submit__icon" aria-hidden>
+            {busy ? <span className="btn__spinner" /> : <Icon name="arrowRight" size={18} />}
+          </span>
         </button>
 
         <p className="auth-form__alt">
-          {mode === "login" ? "New here? " : "Already have an account? "}
+          {mode === "login" ? "No ticket yet? " : "Already have one? "}
           <Link to={`/${mode === "login" ? "register" : "login"}${keepNext}`} replace>
             {mode === "login" ? "Create an account" : "Sign in"}
           </Link>
@@ -244,7 +312,7 @@ function AuthForm({ mode, next }: { mode: Mode; next: string }) {
 
         <p className="auth-form__note">
           <Icon name="shield" size={14} />
-          We keep only your name, email and a salted hash of your password.
+          <span>We keep only your name, email and a salted hash of your password.</span>
         </p>
       </form>
     </div>
