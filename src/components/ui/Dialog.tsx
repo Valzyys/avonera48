@@ -45,7 +45,15 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       returnFocus.current?.focus?.();
     };
     el.addEventListener("close", onClosed);
-    return () => el.removeEventListener("close", onClosed);
+    return () => {
+      el.removeEventListener("close", onClosed);
+      // Unmounted while open (e.g. checkout navigating to the pay page):
+      // no "close" event comes, so release the page scroll lock here.
+      if (el.open) {
+        el.close();
+        document.documentElement.classList.remove("has-modal");
+      }
+    };
   }, []);
 
   return (
