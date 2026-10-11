@@ -39,9 +39,11 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
         team: s.team ?? match?.team ?? "JKT48",
         lineup: match?.lineup ?? [],
         lineupMembers: match?.lineupMembers ?? [],
-        // The dashboard shows the schedule's wide banner; the listing's own art is the stand-in.
-        posterUrl: s.poster ?? match?.posterUrl ?? s.image ?? undefined,
-        bannerUrl: s.banner ?? match?.bannerUrl ?? s.image ?? undefined,
+        // Only the theater schedule's banner is shown in the dashboard: never
+        // the IDN Plus image, and no poster stand-in. Without a banner the
+        // slot shows the title card instead.
+        posterUrl: undefined,
+        bannerUrl: s.banner ?? match?.bannerUrl ?? undefined,
         birthdayShow: !!s.birthday || !!match?.birthdayShow,
         onAir: s.status === "live",
         viewers: s.viewers,
