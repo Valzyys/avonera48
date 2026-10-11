@@ -63,7 +63,20 @@ export interface LiveStream {
   thumbnailUrl?: string;
   /** Gift total as the source formats it, e.g. "Rp 3.067.500". */
   giftTotal?: string;
-  comments?: number;
+  /** Full post-live stats, when /recent/detail has the session. */
+  stats?: StreamStats;
+}
+
+export interface StreamStats {
+  peakViewers: number;
+  comments: number;
+  gifts: number;
+  /** IDN gold (or SHOWROOM paid gifts in gold). */
+  gold: number;
+  /** SHOWROOM points. */
+  points: number;
+  giftSummary: { name: string; image?: string; count: number; gold: number; points: number }[];
+  topSenders: { name: string; avatar?: string; gold: number; points: number; count: number }[];
 }
 
 /* ---------------------------------------------------------------- theater */
@@ -96,4 +109,7 @@ export interface NewsArticle {
   publishedAt: ISODate;
   /** The article on the official site. */
   url: string;
+  image?: string;
+  /** Sanitised HTML body, when the detail endpoint has been read. */
+  content?: string;
 }

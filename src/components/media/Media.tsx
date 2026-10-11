@@ -43,19 +43,27 @@ export function Avatar({ member, size = 32, className }: { member: Member; size?
   );
 }
 
+/**
+ * Theater artwork. Posters and banners come in different shapes, so the
+ * whole image is shown (contain) over a blurred, zoomed copy of itself that
+ * fills the slot — nothing important gets cropped and no bars show.
+ */
 export function ShowArt({ show, className, banner }: { show: Pick<TheaterShow, "title" | "posterUrl" | "bannerUrl" | "team">; className?: string; banner?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const src = banner ? show.bannerUrl ?? show.posterUrl : show.posterUrl ?? show.bannerUrl;
   return (
     <span className={cx("media sa", className)} style={{ ["--oshi" as string]: teamColor(show.team) } as CSSProperties}>
-      <Img
-        src={banner ? show.bannerUrl ?? show.posterUrl : show.posterUrl}
-        alt={`${show.title} poster`}
-        fallback={
-          <span className="sa__fallback" role="img" aria-label={`${show.title} (no poster)`}>
-            <span className="sa__kicker">Theater</span>
-            <span className="sa__title">{show.title}</span>
-          </span>
-        }
-      />
+      {src && !failed ? (
+        <>
+          <img className="sa__bg" src={src} alt="" aria-hidden loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+          <img className="sa__img" src={src} alt={`${show.title} poster`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        </>
+      ) : (
+        <span className="sa__fallback" role="img" aria-label={`${show.title} (no poster)`}>
+          <span className="sa__kicker">Theater</span>
+          <span className="sa__title">{show.title}</span>
+        </span>
+      )}
     </span>
   );
 }

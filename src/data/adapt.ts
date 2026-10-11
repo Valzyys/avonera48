@@ -3,9 +3,10 @@
  * models. Used for both the live API (through the Worker) and the bundled
  * snapshot fallback.
  */
-import type { Generation, LiveStream, Member, NewsArticle, TheaterShow } from "@/types";
+import type { Generation, LiveStream, Member, NewsArticle, StreamStats, TheaterShow } from "@/types";
+import { localPhoto, media } from "@/utils/media";
 import { asTeam, teamColor } from "@/utils/team";
-import type { ApiBirthday, ApiLive, ApiMember, ApiNews, ApiRecent, ApiRecentDetail, ApiTheater } from "./snapshot/types";
+import type { ApiBirthday, ApiLive, ApiMember, ApiNews, ApiNewsDetail, ApiRecent, ApiRecentDetail, ApiTheater } from "./snapshot/types";
 
 export interface Dataset {
   /** The instant "now" refers to (epoch ms). */
@@ -44,7 +45,7 @@ function toMember(m: ApiMember, birthdays: ApiBirthday[]): Member {
     generation: gen ? Number(gen) : null,
     team,
     status: m.is_graduate ? "graduated" : team === "TRAINEE" ? "trainee" : "active",
-    photoUrl: m.img || undefined,
+    photoUrl: localPhoto(m.url_key) ?? media(m.img),
     color: teamColor(team),
     jkt48Id: String(m.jkt48_id ?? ""),
     showroomRoomId: m.room_id || undefined,
@@ -83,10 +84,37 @@ function standIn(key: string, name: string, img?: string): Member {
     generation: null,
     team: "JKT48",
     status: "active",
-    photoUrl: img,
+    photoUrl: media(img),
     color: teamColor("JKT48"),
     jkt48Id: "",
     socials: [],
+  };
+}
+
+/** /recent/detail sends epoch ms; the docs show ISO strings. Accept both. */
+const epoch = (v: number | string | null | undefined) => (typeof v === "number" ? v : v ? new Date(v).getTime() || 0 : 0);
+
+function toStats(d: ApiRecentDetail): StreamStats {
+  return {
+    peakViewers: d.max_viewers ?? 0,
+    comments: d.comment_count ?? 0,
+    gifts: d.gift_count ?? 0,
+    gold: d.total_gold ?? 0,
+    points: d.total_points ?? 0,
+    giftSummary: (d.gifts_summary ?? []).map((g) => ({
+      name: g.name,
+      image: media(g.image_url ?? g.icon),
+      count: g.count ?? 0,
+      gold: g.total_gold ?? g.gold ?? 0,
+      points: g.total_points ?? 0,
+    })),
+    topSenders: (d.top_senders ?? []).map((t) => ({
+      name: (t.name ?? t.username ?? "").trim() || "Anonymous",
+      avatar: media(t.avatar),
+      gold: t.total_gold ?? t.gold ?? 0,
+      points: t.total_points ?? 0,
+      count: t.count ?? 0,
+    })),
   };
 }
 
@@ -113,10 +141,12 @@ export function buildDataset(raw: RawData, now: number): Dataset {
       startedAt: l.started_at || new Date(now).toISOString(),
       url: l.stream_url || null,
       replayUrl: null,
-      thumbnailUrl: l.img || member.photoUrl,
+      thumbnailUrl: media(l.img) ?? member.photoUrl,
     };
   });
   const liveSlugs = new Set(live.map((l) => l.memberSlug));
+
+  const details = new Map((raw.recentDetail ?? []).map((d) => [d.id, d]));
 
   const recent: LiveStream[] = raw.recent.flatMap((r) => {
     const start = new Date(r.live_info.date.start).getTime();
@@ -126,6 +156,7 @@ export function buildDataset(raw: RawData, now: number): Dataset {
     // A session that spans "now" is live (used when replaying a snapshot).
     const isLive = end > now;
     if (isLive && liveSlugs.has(member.slug)) return [];
+    const d = isLive ? undefined : details.get(r._id);
     return [
       {
         id: r._id,
@@ -135,19 +166,22 @@ export function buildDataset(raw: RawData, now: number): Dataset {
         status: isLive ? "live" : "ended",
         startedAt: r.live_info.date.start,
         endedAt: isLive ? undefined : r.live_info.date.end,
-        viewers: r.live_info.viewers.num,
+        viewers: d?.max_viewers ?? r.live_info.viewers.num,
         url: null,
-        replayUrl: null,
-        thumbnailUrl: r.idn.image || r.member.img,
+        replayUrl: d?.youtube_url ?? null,
+        thumbnailUrl: media(d?.image || r.idn.image || r.member.img),
         giftTotal: r.total_gift,
+        stats: d ? toStats(d) : undefined,
       } satisfies LiveStream,
     ];
   });
   const seen = new Set(recent.map((r) => r.id));
 
   const detail: LiveStream[] = (raw.recentDetail ?? []).flatMap((d) => {
-    if (seen.has(d.id) || d.end_time > now) return [];
-    const member = resolve(d.name, d.name, d.image);
+    const start = epoch(d.start_time);
+    const end = epoch(d.end_time);
+    if (seen.has(d.id) || !start || !end || end > now) return [];
+    const member = resolve(d.name, d.name, d.avatar ?? undefined);
     return [
       {
         id: d.id,
@@ -155,13 +189,13 @@ export function buildDataset(raw: RawData, now: number): Dataset {
         platform: d.type === "idn" ? "IDN Live" : "SHOWROOM",
         title: d.title,
         status: "ended",
-        startedAt: new Date(d.start_time).toISOString(),
-        endedAt: new Date(d.end_time).toISOString(),
+        startedAt: new Date(start).toISOString(),
+        endedAt: new Date(end).toISOString(),
         viewers: d.max_viewers,
         url: null,
         replayUrl: d.youtube_url,
-        thumbnailUrl: d.image,
-        comments: d.comment_count,
+        thumbnailUrl: media(d.image),
+        stats: toStats(d),
       } satisfies LiveStream,
     ];
   });
@@ -179,8 +213,8 @@ export function buildDataset(raw: RawData, now: number): Dataset {
       status: new Date(endsAt).getTime() < now ? "completed" : "upcoming",
       team: t.jkt48_member_type ?? "JKT48",
       lineup: (t.lineup ?? []).map((l) => byJkt48Id.get(String(l.id))?.slug ?? find(l.url_key)?.slug).filter((s): s is string => !!s),
-      posterUrl: t.poster || undefined,
-      bannerUrl: t.banner || undefined,
+      posterUrl: media(t.poster),
+      bannerUrl: media(t.banner),
       birthdayShow: !!t.is_birthday_show,
     };
   });
@@ -196,6 +230,17 @@ export function buildDataset(raw: RawData, now: number): Dataset {
     generations,
     streams: [...live, ...recent, ...detail].sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
     shows,
-    news: raw.news.map((n) => ({ slug: n.slug, title: n.title, category: n.category, publishedAt: n.date, url: n.url })),
+    news: raw.news.map((n) => ({ slug: n.slug, title: n.title, category: n.category, publishedAt: n.date, url: n.url, image: media(n.background_image) })),
+  };
+}
+
+/** Merge /news/{slug} into the list record: body, and fields the list lacks. */
+export function withNewsDetail(article: NewsArticle, d: ApiNewsDetail, sanitize: (html: string) => string): NewsArticle {
+  return {
+    ...article,
+    url: article.url || d.url,
+    category: article.category || d.category,
+    image: article.image || media(d.background_image),
+    content: d.content ? sanitize(d.content) : undefined,
   };
 }

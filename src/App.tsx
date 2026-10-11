@@ -21,6 +21,7 @@ const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: "live", lazy: page(() => import("@/pages/fan/LivePage")) },
       { path: "recent-live", lazy: page(() => import("@/pages/fan/RecentLivePage")) },
+      { path: "recent-live/:id", lazy: page(() => import("@/pages/fan/RecentDetailPage")) },
       { path: "theater", lazy: page(() => import("@/pages/fan/TheaterPage")) },
       { path: "theater/:slug", lazy: page(() => import("@/pages/fan/ShowDetailPage")) },
       { path: "members", lazy: page(() => import("@/pages/fan/MembersPage")) },

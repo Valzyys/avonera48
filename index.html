@@ -19,9 +19,25 @@
         d.style.colorScheme = t;
       })();
     </script>
+    <style>
+      /* Boot splash: painted with the HTML, replaced the moment React renders,
+         so there is never a blank page while the app downloads. */
+      html { background: #fbfaf8; }
+      html[data-theme="dark"] { background: #121110; }
+      .boot { position: fixed; inset: 0; display: grid; place-items: center; background: inherit; }
+      .boot__word { font: 900 clamp(2.2rem, 7vw, 5rem)/1 "Zen Kaku Gothic New", system-ui, sans-serif; letter-spacing: 0.04em; color: #1c1a19; }
+      html[data-theme="dark"] .boot__word { color: #f3f0eb; }
+      .boot__bar { display: flex; height: 6px; width: min(280px, 60vw); margin: 18px auto 0; border-radius: 6px; overflow: hidden; }
+      .boot__bar i { flex: 1; animation: boot 1s ease-in-out infinite alternate; }
+      .boot__bar i:nth-child(1) { background: #e5679c; }
+      .boot__bar i:nth-child(2) { background: #4b8fe2; animation-delay: .15s; }
+      .boot__bar i:nth-child(3) { background: #ef7a3c; animation-delay: .3s; }
+      .boot__bar i:nth-child(4) { background: #3aa877; animation-delay: .45s; }
+      @keyframes boot { from { opacity: .25; } to { opacity: 1; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" aria-hidden="true"><div><div class="boot__word">AVONERA48</div><div class="boot__bar"><i></i><i></i><i></i><i></i></div></div></div></div>
     <noscript>
       <p style="padding:24px;font-family:system-ui;color:#f3f5f8;background:#08090d">Avonera48 needs JavaScript enabled.</p>
     </noscript>
