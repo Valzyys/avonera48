@@ -106,7 +106,7 @@ export default function WatchRoomPage() {
       <div className="dash-page">
         <section className="paywall">
           <span className="paywall__art">
-            <ShowArt show={show} use="poster" />
+            <ShowArt show={show} use="banner" />
           </span>
           <div className="paywall__body">
             <span className="paywall__lock">

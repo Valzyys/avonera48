@@ -49,7 +49,7 @@ export default function OverviewPage() {
       {next ? (
         <section className={`ov-hero ${live ? "is-live" : ""}`} aria-label={live ? "On stage now" : "Next show"}>
           <span className="ov-hero__art">
-            <ShowArt show={next} use="poster" />
+            <ShowArt show={next} use="banner" />
           </span>
           <div className="ov-hero__body">
             <span className="ov-hero__kicker">
