@@ -59,7 +59,7 @@ async function proxy(request: Request, env: Env, ctx: ExecutionContext, url: URL
   const key = apiKey(env);
   if (!key) return json({ ok: false, error: "not_configured", message: "DATA_API_KEY is not set." }, 503);
 
-  const upstream = new URL(url.pathname, UPSTREAM);
+  const upstream = new URL(url.pathname, env.DATA_API_BASE || UPSTREAM);
   for (const [k, v] of url.searchParams) if (PASS_PARAMS.has(k) && v.length <= 100) upstream.searchParams.set(k, v);
 
   // Edge cache keyed on the upstream URL (the key itself is not part of it);

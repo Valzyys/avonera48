@@ -12,6 +12,7 @@ import "./styles/site.css";
 import "./styles/data.css";
 import "./styles/account.css";
 import "./styles/auth.css";
+import "./styles/dashboard.css";
 import { App } from "./App";
 
 createRoot(document.getElementById("root")!).render(
