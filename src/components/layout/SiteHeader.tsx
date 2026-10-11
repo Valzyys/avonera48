@@ -18,7 +18,7 @@ export const primaryNav = [
   { to: "/news", label: "News" },
 ];
 
-const menuNav = [{ to: "/", label: "Home" }, ...primaryNav.map((n) => (n.label === "Recent" ? { ...n, label: "Recent live" } : n)), { to: "/about", label: "About" }, { to: "/dashboard", label: "Theater room" }];
+const menuNav = [{ to: "/", label: "Home" }, ...primaryNav.map((n) => (n.label === "Recent" ? { ...n, label: "Recent live" } : n)), { to: "/about", label: "About" }, { to: "/dashboard", label: "Dashboard" }];
 
 /**
  * Floating capsule header. A soft "blob" slides under whichever link the
@@ -217,7 +217,7 @@ function MobileMenu({ open, onClose, liveCount }: { open: boolean; onClose: () =
   );
 }
 
-/** Sign-in pill, or the signed-in member's initial linking to the theater room. */
+/** Sign-in pill, or the signed-in member's initial linking to the dashboard. */
 function AccountButton() {
   const { user } = useAuth();
   if (user === undefined) return null;
@@ -230,11 +230,11 @@ function AccountButton() {
     );
   }
   return (
-    <Link to="/dashboard" className="account-btn account-btn--in" aria-label={`Theater room, signed in as ${user.name}`} title={user.name}>
+    <Link to="/dashboard" className="account-btn account-btn--in" aria-label={`Dashboard, signed in as ${user.name}`} title={user.name}>
       <span className="account-btn__avatar" aria-hidden>
         {user.name[0]?.toUpperCase()}
       </span>
-      <span className="account-btn__word">Room</span>
+      <span className="account-btn__word">Dashboard</span>
     </Link>
   );
 }

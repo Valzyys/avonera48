@@ -167,12 +167,12 @@ export default function PayPage() {
               </span>
               <h1 className="pay-done__title">Payment received</h1>
               <p className="meta">
-                {order.kind === "membership" ? "Your membership is active. Every show is open to you." : "Your ticket is ready. See you in the theater room."}
+                {order.kind === "membership" ? "Your membership is active. Every show is open to you." : "Your ticket is ready. See you at the show."}
               </p>
               <div className="pay-actions">
                 {order.kind === "ticket" ? (
                   <Link to={`/dashboard/watch/${order.item_id}`} className="dash-btn dash-btn--primary dash-btn--lg">
-                    Go to the watch room
+                    Watch the show
                   </Link>
                 ) : (
                   <Link to="/dashboard/schedule" className="dash-btn dash-btn--primary dash-btn--lg">
