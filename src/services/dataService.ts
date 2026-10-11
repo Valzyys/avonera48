@@ -1,6 +1,7 @@
-import { buildDataset, type Dataset, type RawData } from "@/data/adapt";
+import { buildDataset, withNewsDetail, type Dataset, type RawData } from "@/data/adapt";
 import { SNAPSHOT_NOW, snapshotDataset } from "@/data/snapshot";
-import type { ApiEnvelope } from "@/data/snapshot/types";
+import type { ApiEnvelope, ApiNewsDetail } from "@/data/snapshot/types";
+import { sanitizeHtml } from "@/utils/sanitize";
 import type { LiveStream, Member, TheaterShow } from "@/types";
 import type { DataService, LiveItem, LiveQuery, ShowSummary } from "./types";
 
@@ -42,7 +43,7 @@ async function get<T>(path: string): Promise<T> {
 const SLOW_TTL = 5 * 60_000;
 const FAST_TTL = 30_000;
 let slow: { at: number; p: Promise<Pick<RawData, "members" | "birthdays" | "theater" | "news">> } | null = null;
-let fast: { at: number; p: Promise<Pick<RawData, "live" | "recent">> } | null = null;
+let fast: { at: number; p: Promise<Pick<RawData, "live" | "recent" | "recentDetail">> } | null = null;
 
 function fetchSlow() {
   if (!slow || Date.now() - slow.at > SLOW_TTL) {
@@ -56,7 +57,15 @@ function fetchSlow() {
 }
 function fetchFast() {
   if (!fast || Date.now() - fast.at > FAST_TTL) {
-    const p = Promise.all([get<RawData["live"]>("/api/v1/live"), get<RawData["recent"]>("/api/v1/recent")]).then(([live, recent]) => ({ live, recent }));
+    const p = Promise.all([
+      get<RawData["live"]>("/api/v1/live"),
+      get<RawData["recent"]>("/api/v1/recent"),
+      // Full post-live stats; optional — the list still works without it.
+      get<{ items: NonNullable<RawData["recentDetail"]> }>("/api/v1/recent/detail?limit=60&sort=recent").then(
+        (d) => d.items ?? [],
+        () => [],
+      ),
+    ]).then(([live, recent, recentDetail]) => ({ live, recent, recentDetail }));
     fast = { at: Date.now(), p };
     p.catch(() => (fast = null));
   }
@@ -231,6 +240,14 @@ export const dataService: DataService = {
     return clone({ ...h.toSummary(show), sameTitle: ds.shows.filter((s) => s.title === show.title && s.slug !== slug).sort(byStart).map(h.toSummary) });
   },
 
+  async getStream(id) {
+    const ds = await dataset();
+    const h = helpers(ds);
+    const s = ds.streams.find((x) => x.id === id);
+    if (!s) return null;
+    return clone({ stream: h.toLive(s), more: ds.streams.filter((x) => x.memberSlug === s.memberSlug && x.id !== id && x.status === "ended").slice(0, 4).map(h.toLive) });
+  },
+
   async listNews(category) {
     const ds = await dataset();
     const items = ds.news.filter((n) => !category || n.category === category).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
@@ -239,8 +256,13 @@ export const dataService: DataService = {
 
   async getNews(slug) {
     const ds = await dataset();
-    const article = ds.news.find((n) => n.slug === slug);
+    let article = ds.news.find((n) => n.slug === slug);
     if (!article) return null;
+    if (mode === "live") {
+      // The body comes from /news/{slug}; the list record is the fallback.
+      const d = await get<ApiNewsDetail>(`/api/v1/news/${encodeURIComponent(slug)}`).catch(() => null);
+      if (d) article = withNewsDetail(article, d, sanitizeHtml);
+    }
     const related = ds.members.filter((m) => article.title.toLowerCase().includes(m.name.toLowerCase()));
     return clone({ article, related, more: ds.news.filter((n) => n.slug !== slug).slice(0, 4) });
   },

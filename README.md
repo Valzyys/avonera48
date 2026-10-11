@@ -17,3 +17,14 @@ Without the key (or if the API can't be reached) the app falls back to a bundled
 - `npm run preview` — build and run with `wrangler dev` (put the key in `.dev.vars` as `JKT48CONNECT_API_KEY=...`)
 - `npm run deploy` — build and deploy
 - `npm run typecheck`, `npm run lint`, `npm test`
+
+## Member photos as local assets
+
+Photos load fastest when they ship with the site. Download them once (and again whenever members change), then commit the result:
+
+```sh
+JKT48CONNECT_API_KEY=jk48c_... npm run photos
+git add public/photos src/data/photos.json
+```
+
+Members without a local photo fall back to the API image, served through the Worker's `/media/*` proxy and cached for a year.

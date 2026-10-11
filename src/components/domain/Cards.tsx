@@ -47,7 +47,8 @@ export function LiveTile({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveIte
   );
 }
 
-export function StreamCard({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveItem) => void; index?: number }) {
+/** A finished stream; opens its detail page with full stats. */
+export function StreamCard({ item }: { item: LiveItem; onOpen?: (i: LiveItem) => void; index?: number }) {
   return (
     <article className="stream-card">
       <div className="stream-card__media">
@@ -66,14 +67,21 @@ export function StreamCard({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveI
           <span>{formatRelative(item.startedAt, api.now)}</span>
         </p>
       </div>
-      <button type="button" className="tile-hit" onClick={() => onOpen(item)}>
+      <Link to={`/recent-live/${encodeURIComponent(item.id)}`} viewTransition className="tile-hit">
         <span className="sr-only">
           Stream details: {item.member.nickname}, {item.title}
         </span>
-      </button>
+      </Link>
+      {item.stats && (
+        <span className="stream-card__peak" aria-label="Peak viewers">
+          {compactNum(item.stats.peakViewers)} peak
+        </span>
+      )}
     </article>
   );
 }
+
+const compactNum = (n: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 
 export function LineupAvatars({ members, max = 6, size = 26 }: { members: Member[]; max?: number; size?: number }) {
   if (members.length === 0) return <span className="meta">Lineup not announced</span>;

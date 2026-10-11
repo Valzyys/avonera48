@@ -50,6 +50,12 @@ export interface Overview {
   birthdaysThisMonth: number;
 }
 
+export interface StreamDetail {
+  stream: LiveItem;
+  /** Other recent streams by the same member. */
+  more: LiveItem[];
+}
+
 export interface NewsDetail {
   article: NewsArticle;
   /** Members named in the headline. */
@@ -80,6 +86,9 @@ export interface DataService {
 
   listShows(status?: ShowStatus): Promise<ShowSummary[]>;
   getShow(slug: string): Promise<ShowDetail | null>;
+
+  /** One stream with its full stats (when the source has them). */
+  getStream(id: string): Promise<StreamDetail | null>;
 
   listNews(category?: string): Promise<NewsArticle[]>;
   getNews(slug: string): Promise<NewsDetail | null>;

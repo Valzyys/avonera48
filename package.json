@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "photos": "node scripts/fetch-photos.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

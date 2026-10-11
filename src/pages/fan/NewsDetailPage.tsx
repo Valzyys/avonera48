@@ -53,14 +53,33 @@ export default function NewsDetailPage() {
               <h1 className="h-page" data-in>
                 {d.article.title}
               </h1>
-              <div className="article__source" data-in>
-                <p className="lead">The full announcement is published on the official JKT48 website.</p>
-                <a className="btn btn--primary btn--md" href={d.article.url} target="_blank" rel="noreferrer noopener">
-                  <span className="btn__label">Read on jkt48.com</span>
-                  <Icon name="arrowUpRight" size={16} />
-                </a>
-                <SourceNote />
-              </div>
+              {d.article.image && (
+                <figure className="article__cover" data-in>
+                  <img src={d.article.image} alt="" referrerPolicy="no-referrer" />
+                </figure>
+              )}
+              {d.article.content ? (
+                <>
+                  {/* Sanitised in the data layer (allow-listed tags, no styles or scripts); images stay where the source put them. */}
+                  <div className="article__body prose" data-in dangerouslySetInnerHTML={{ __html: d.article.content }} />
+                  <p className="article__origin meta" data-in>
+                    Source:{" "}
+                    <a className="link" href={d.article.url} target="_blank" rel="noreferrer noopener">
+                      jkt48.com
+                    </a>{" "}
+                    · <SourceNote />
+                  </p>
+                </>
+              ) : (
+                <div className="article__source" data-in>
+                  <p className="lead">The full announcement is published on the official JKT48 website.</p>
+                  <a className="btn btn--primary btn--md" href={d.article.url} target="_blank" rel="noreferrer noopener">
+                    <span className="btn__label">Read on jkt48.com</span>
+                    <Icon name="arrowUpRight" size={16} />
+                  </a>
+                  <SourceNote />
+                </div>
+              )}
               {d.related.length > 0 && (
                 <section className="article__related" aria-labelledby="related-t">
                   <h2 id="related-t" className="meta">

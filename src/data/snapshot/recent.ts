@@ -16,8 +16,33 @@ export const recentResponse: ApiRecent[] = [
   { _id: "hi-261009231836", type: "idn", total_gift: "Rp 4.557.500", points: 1823, member: { name: "Michie JKT48", nickname: "Michie JKT48", url: "michie", img: I("h4hsxz3gmqpogpmme2vwq33utbji2eww6gh4bzvkuvucd24253f6zaniaunc3lseahvhwoylzquxhyilkrilekmepceiyhwtxrydbx2bkhcicaiq4geyjokl2bbq") }, idn: { title: "hi", image: I("3ezdvr7424qb2lv5rsv6phkmm7fbvxmvwnmaie3cwhm75ooktd3k5vuxabmvxu7bcxk3yasg5fwvx6dbpzjb5es62qo6oyy2hkwq3qrtqfj3ur2xpahf73a7gyga") }, live_info: { duration: 4808936, viewers: { num: 6621 }, date: { start: "2026-10-09T16:18:43.000Z", end: "2026-10-09T17:38:51.936Z" } } },
 ];
 
-/** Snapshot of GET /api/v1/recent/detail?name=Erine (full stats). */
+const R = (hash: string) => `https://jkt48connect.com/img/recent/${hash}`;
+const G = (name: string, hash: string, count: number, total_gold: number, total_points = 0) => ({ name, image_url: R(`${hash}.png`), count, total_gold, total_points });
+const T = (name: string, avatar: string, total_gold: number, count: number, total_points = 0) => ({ name, avatar: R(avatar), total_gold, count, total_points });
+
+/**
+ * Snapshot of GET /api/v1/recent/detail (latest sessions, plus ?name=Erine).
+ * Gift summaries and top senders are trimmed to their first entries.
+ */
 export const recentDetailResponse: ApiRecentDetail[] = [
+  {
+    id: "hai-261010230713", name: "Lily", title: "Hai", type: "idn", image: R("28af4b0ec455a7c081ce1ad7.webp"), avatar: R("f8bef4e7c26c8aa9dd4cb99c.webp"),
+    start_time: 1791648440000, end_time: 1791650339536, max_viewers: 4667, comment_count: 2183, gift_count: 64, total_gold: 1227, total_points: 0, youtube_url: "https://youtu.be/yrNT-M-B_UY",
+    gifts_summary: [G("Jet Pribadi", "ca4c79bdd770cccda084ca74", 1, 399), G("JKT48 Show", "c9fd30ea562e466835b4dae2", 2, 200), G("Bubble Gun", "1f95d0b7a4c960950f8864fa", 1, 175), G("JAPOTA", "cca2e2cbcfd4888b572dfcca", 33, 132), G("Emas Batang", "9b1413f5a445ae00b1cd9c52", 2, 98), G("LILY", "ed1c5371dc544d347e6829a6", 3, 60)],
+    top_senders: [T("Nicola", "c23b71cd2182eb178ae31731.webp", 399, 1), T("Bikers _ Radadi", "aadd1c1ab61af4b54c744f7f.webp", 208, 6), T("Idham", "e7eeb7567d78565691d3c9eb.webp", 175, 1), T("Bang Alex Yo!", "bcb5739c451c908c9e2dd3bc.webp", 100, 14), T("Yayaa mau kenalan", "3f5d07c3fc6585bdc62648c0.webp", 100, 1)],
+  },
+  {
+    id: "haii-261010222858", name: "Lana", title: "Haii", type: "idn", image: R("26c3908e6597e44e625af0c7.webp"), avatar: R("a3c0eba4d1bc17c73da3deaf.webp"),
+    start_time: 1791646156000, end_time: 1791650954605, max_viewers: 6444, comment_count: 3632, gift_count: 75, total_gold: 3283, total_points: 0, youtube_url: "https://youtu.be/c-oaJuBWzQQ",
+    gifts_summary: [G("Emas Batang", "9b1413f5a445ae00b1cd9c52", 30, 1470), G("Balon Pesta", "123e627a5d5c8eb4c1bbb838", 1, 279), G("Saatnya Buka", "049adcc34cb0107261e681ae", 1, 259), G("Cendrawasih", "d83958ddb209d010f3cd73a7", 2, 238), G("Kastil Hantu", "aff80b63920418ec7b212299", 1, 199), G("Motor Sport", "b4bf44ec2d061d1682c7d9ce", 2, 176)],
+    top_senders: [T("🐱", "2106fed0255ac10bca594fe2.webp", 543, 5), T("Reza Gian", "ea337be87cb198ae1d559cd5.webp", 398, 2), T("_danifajri", "3234f5189852e987f4ff7d10.webp", 315, 5), T("Andree", "758a18dd808d7727ec90ab45.webp", 315, 11), T("Azkal Azkiya", "5628815d514b21dfedf80908.webp", 245, 5)],
+  },
+  {
+    id: "showroom:461478:1791641889000", name: "Gracie", title: "JKT48_Gracie", type: "showroom", image: R("e120af01fffddb3c009a9cad.jpeg"), avatar: null,
+    start_time: 1791641889000, end_time: 1791646829591, max_viewers: 5837, comment_count: 1899, gift_count: 1467, total_gold: 36765, total_points: 11602, youtube_url: "https://youtu.be/pm5KestUW5k",
+    gifts_summary: [G("mirror ball(anime)", "3627720f99ee17e8344f98ee", 43, 21500), G("Special Rainbow (anime)", "111273159734959c6e96129b", 6, 6000), G("Aurora(anime)", "7a2133a824a89f07a75e2a32", 2, 2000), G("Coffee beans(anime)", "1405e02734cace39254c0ef5", 170, 1700), G("Kucing Unyu", "db0bad20ef4c60679475aba0", 1, 1000), G("RainbowStar", "6749a217abccd8ebc70a91f8", 75, 0, 7500)],
+    top_senders: [T("Akbar Tawakal", "a9ea606b5f0ac1c3d62354dd.png", 9500, 20, 1), T("Julian", "110ebfdc529e7b66535a0ef3.png", 5021, 29, 1300), T("tokki", "81821732911cbc956226ce9a.png", 5000, 10), T("Ridho_25", "03b68406675c8aa9f180a19d.png", 3032, 8), T("ahay_adam", "e93b79d77922a08232555ee7.png", 2000, 2)],
+  },
   { id: "showroom:510000:1791386946000", name: "Erine", title: "JKT48_Erine", image: "https://jkt48connect.com/img/recent/35d66d69b76f0e8903e0e49f.jpeg", type: "showroom", start_time: 1791386946000, end_time: 1791392020428, max_viewers: 10567, comment_count: 8444, gift_count: 2791, total_gold: 35725, total_points: 35010, youtube_url: "https://youtu.be/DozC39W3fLI" },
   { id: "diroriiiii-260930231403", name: "Erine", title: "diroriiiii", image: "https://jkt48connect.com/img/recent/8e843bfcd094db20bc824e96.webp", type: "idn", start_time: 1790784850000, end_time: 1790790905969, max_viewers: 10778, comment_count: 9638, gift_count: 142, total_gold: 3825, total_points: 0, youtube_url: "https://youtu.be/sHEs3EAZpYE" },
   { id: "diroriiiii-260929225835", name: "Erine", title: "diroriiiii", image: "https://jkt48connect.com/img/recent/197981374041be3887ae63f9.webp", type: "idn", start_time: 1790697521000, end_time: 1790703194856, max_viewers: 15366, comment_count: 12343, gift_count: 88, total_gold: 8477, total_points: 0, youtube_url: "https://youtu.be/tkpvxjjSWpQ" },

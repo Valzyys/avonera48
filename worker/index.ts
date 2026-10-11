@@ -28,6 +28,7 @@ const ROUTES: { pattern: RegExp; ttl: number }[] = [
   { pattern: /^\/api\/v1\/birthday$/, ttl: 3600 },
   { pattern: /^\/api\/v1\/theater$/, ttl: 300 },
   { pattern: /^\/api\/v1\/news$/, ttl: 300 },
+  { pattern: /^\/api\/v1\/news\/[A-Za-z0-9-]{1,200}$/, ttl: 1800 },
 ];
 /** Query parameters passed through to the upstream; everything else is dropped. */
 const PASS_PARAMS = new Set(["page", "limit", "offset", "name", "type", "from", "to", "sort", "order", "room_id"]);
@@ -71,9 +72,43 @@ async function proxy(request: Request, env: Env, ctx: ExecutionContext, url: URL
   return out;
 }
 
+/**
+ * Image proxy: /media/<path> → https://jkt48connect.com/<path> for the API's
+ * image paths only. Images there are content-addressed, so they are cached
+ * at the edge and in browsers for a year.
+ */
+async function media(request: Request, ctx: ExecutionContext, url: URL): Promise<Response> {
+  const path = url.pathname.slice("/media/".length);
+  if (!/^(api\/img|img)\/[A-Za-z0-9/_.-]{1,300}$/.test(path)) return new Response("Not found", { status: 404 });
+  const upstream = `${UPSTREAM}/${path}`;
+  const cache = caches.default;
+  const key = new Request(upstream, { method: "GET" });
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  let res: Response;
+  try {
+    res = await fetch(upstream, { cf: { cacheEverything: true, cacheTtl: 31536000 } } as RequestInit);
+  } catch {
+    return new Response("Upstream unreachable", { status: 502 });
+  }
+  const type = res.headers.get("content-type") ?? "";
+  if (!res.ok || !type.startsWith("image/")) return new Response("Not found", { status: res.ok ? 404 : res.status });
+  const out = new Response(res.body, {
+    status: 200,
+    headers: { "content-type": type, "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" },
+  });
+  ctx.waitUntil(cache.put(key, out.clone()));
+  return out;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/media/")) {
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
+      return media(request, ctx, url);
+    }
 
     if (url.pathname.startsWith("/api/") && request.method !== "GET" && request.method !== "HEAD") {
       return json({ ok: false, error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });

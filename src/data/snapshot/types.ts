@@ -56,20 +56,57 @@ export interface ApiRecent {
 }
 
 /** GET /api/v1/recent/detail → data.items[] */
+export interface ApiGiftSummary {
+  name: string;
+  image_url?: string;
+  icon?: string;
+  count: number;
+  total_gold?: number;
+  gold?: number;
+  total_points?: number;
+}
+
+export interface ApiTopSender {
+  name?: string;
+  username?: string;
+  avatar?: string | null;
+  total_gold?: number;
+  gold?: number;
+  total_points?: number;
+  count?: number;
+}
+
+/** GET /api/v1/recent/detail → data.items[]. Times arrive as epoch ms or ISO strings. */
 export interface ApiRecentDetail {
   id: string;
   name: string;
   title: string;
   image: string;
+  avatar?: string | null;
   type: "idn" | "showroom";
-  start_time: number;
-  end_time: number;
+  start_time: number | string;
+  end_time: number | string;
   max_viewers: number;
   comment_count: number;
   gift_count: number;
   total_gold: number;
   total_points: number;
   youtube_url: string | null;
+  gifts_summary?: ApiGiftSummary[];
+  top_senders?: ApiTopSender[];
+}
+
+/** GET /api/v1/news/{slug} → data */
+export interface ApiNewsDetail {
+  id: string;
+  title: string;
+  category: string;
+  url: string;
+  date: string;
+  slug: string;
+  background_image?: string;
+  /** HTML body from the official site. */
+  content?: string;
 }
 
 /** GET /api/v1/theater → data[] */
@@ -94,6 +131,7 @@ export interface ApiNews {
   slug: string;
   title: string;
   category: string;
+  background_image?: string;
 }
 
 /** GET /api/v1/birthday → data[] */

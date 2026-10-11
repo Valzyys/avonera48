@@ -18,6 +18,7 @@ const DAY = 86_400_000;
 const WIB = 7 * 3_600_000;
 const dayStartOf = (ms: number) => Math.floor((ms + WIB) / DAY) * DAY - WIB;
 const INTRO_KEY = "avn.intro.v5";
+const TEAM_TINTS = ["#e5679c", "#4b8fe2", "#ef7a3c", "#3aa877"];
 
 /* ------------------------------------------------------------------ */
 /* Section heading: big uppercase word that rises out of a mask (GSAP) */
@@ -67,12 +68,13 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
   const ref = useRef<HTMLDivElement>(null);
   const members = useResource(() => api.listMembers({ sort: "generation" }), []);
   const live = useResource(() => api.listLiveNow(), []);
-  const ready = !!members.data;
+  // The intro never waits for data: tiles start in team colours and the
+  // portraits drop in whenever the member list arrives.
   const [grid] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches);
 
   useGSAP(
     () => {
-      if (!ready || !ref.current) return;
+      if (!ref.current) return;
       const stripes = ref.current.querySelectorAll(".intro__stripe");
       const word = ref.current.querySelectorAll(".intro__char");
       const meta = ref.current.querySelector(".intro__meta");
@@ -114,22 +116,23 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
         window.removeEventListener("wheel", skip);
       };
     },
-    { scope: ref, revertOnUpdate: true, dependencies: [ready] },
+    { scope: ref },
   );
 
-  const cast = (members.data ?? []).filter((m) => m.status === "active" && m.photoUrl).slice(0, grid ? 12 : 14);
+  const count = grid ? 12 : 14;
+  const cast = (members.data ?? []).filter((m) => m.status === "active" && m.photoUrl).slice(0, count);
+  const tiles = Array.from({ length: count }, (_, k) => cast[k] ?? null);
   return (
     <div ref={ref} className={`intro ${grid ? "intro--grid" : ""}`} aria-hidden>
       <div className="intro__stripes">
-        {cast.map((m) => (
-          <span key={m.slug} className="intro__stripe" style={{ background: m.color }}>
-            <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.display = "none")} />
-            {grid && <span className="intro__tile-name">{m.nickname}</span>}
+        {tiles.map((m, k) => (
+          <span key={k} className="intro__stripe" style={{ background: m?.color ?? TEAM_TINTS[k % TEAM_TINTS.length] }}>
+            {m && <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" onLoad={(e) => e.currentTarget.classList.add("is-in")} onError={(e) => (e.currentTarget.style.display = "none")} />}
+            {grid && m && <span className="intro__tile-name">{m.nickname}</span>}
           </span>
         ))}
       </div>
-      {ready && (
-        <div className="intro__center">
+      <div className="intro__center">
           <span className="intro__word">
             {"AVONERA48".split("").map((ch, k) => (
               <span key={k} className="intro__mask">
@@ -139,7 +142,6 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
           </span>
           <span className="intro__meta">JKT48 fan site · {live.data ? `${live.data.length} live now` : "today"}</span>
         </div>
-      )}
     </div>
   );
 }
@@ -576,13 +578,17 @@ function Roster() {
                   <div className="roster__head">
                     <span className="roster__num">{g.number ? String(g.number).padStart(2, "0") : "—"}</span>
                     <span className="label">{g.number ? "Generation" : "Generation not listed"}</span>
+                    <span className="roster__count">{members.length === 1 ? "1 member" : `${members.length} members`}</span>
                   </div>
                   <ul className="roster__list">
                     {members.map((m) => (
                       <li key={m.slug}>
                         <Link to={`/members/${m.slug}`} viewTransition className={`roster__member ${m.status === "graduated" ? "is-grad" : ""}`} style={oshi(m)}>
-                          <span className="roster__swatch" aria-hidden />
-                          <span className="roster__name">{m.name}</span>
+                          <Avatar member={m} size={44} />
+                          <span className="roster__text">
+                            <span className="roster__name">{m.nickname}</span>
+                            <span className="roster__full">{m.name}</span>
+                          </span>
                           {liveSet.has(m.slug) && <Flag tone="live">LIVE</Flag>}
                           {m.status === "trainee" && <span className="roster__note">Trainee</span>}
                           {m.status === "graduated" && <span className="roster__note">Graduated</span>}
