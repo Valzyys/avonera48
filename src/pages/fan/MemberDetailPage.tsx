@@ -4,13 +4,13 @@ import { Flag, MemberPhoto } from "@/components/media/Media";
 import { MemberStatusBadge } from "@/components/domain/Badges";
 import { NewsRow, ShowRow, StreamCard, vtPhoto } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
-import { StreamDialog } from "@/components/domain/StreamDialog";
+import { StreamDialog, useStreamOpener } from "@/components/domain/StreamDialog";
 import { Badge, Breadcrumb, Button, ButtonLink, EmptyState, ErrorState, Icon, Skeleton, Tabs } from "@/components/ui";
 import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { enter, shift, useGSAP } from "@/motion/gsap";
-import { api, type LiveItem } from "@/services";
+import { api } from "@/services";
 import { compact, formatDate } from "@/utils/format";
 import { teamLabel } from "@/utils/team";
 
@@ -20,7 +20,7 @@ export default function MemberDetailPage() {
   const { slug = "" } = useParams();
   const res = useResource(() => api.getMember(slug), [slug]);
   const [tab, setTab] = useState<Tab>("shows");
-  const [stream, setStream] = useState<LiveItem | null>(null);
+  const { stream, open: setStream, close: closeStream } = useStreamOpener();
   const d = res.data;
   // The directory already delivered this member: render it at once so the
   // photo morphs from the card while activity loads.
@@ -180,7 +180,7 @@ export default function MemberDetailPage() {
           )}
         </section>
       </div>
-      <StreamDialog stream={stream} onClose={() => setStream(null)} />
+      <StreamDialog stream={stream} onClose={closeStream} />
     </div>
   );
 }

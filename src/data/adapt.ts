@@ -91,6 +91,28 @@ function standIn(key: string, name: string, img?: string): Member {
   };
 }
 
+/** IDN's share link: opens the live in the IDN app, or idn.app on the web. */
+export function idnLiveLink(username: string, slug: string) {
+  const q = new URLSearchParams({
+    af_dp: `idnapp://live/${username}/?room=${slug}`,
+    af_web_dp: `https://www.idn.app/${username}/live/${slug}`,
+    c: "detail-liveroom",
+    deep_link_value: `idnapp://live/?room=${slug}`,
+    pid: "idnapp",
+  });
+  return `https://click.idn.media/VKUf?${q}`;
+}
+
+const QUALITY: Record<string, string> = { オリジナル画質: "Original", 高画質: "High", 中画質: "Medium", 低画質: "Low" };
+
+/** HLS sources for the on-site player, best first, with readable labels. */
+function sourcesOf(l: ApiLive) {
+  const list = [...(l.streaming ?? [])].filter((s) => /^https:\/\//.test(s.url)).sort((a, b) => b.quality - a.quality);
+  const out = list.map((s) => ({ label: QUALITY[s.label] ?? (s.label === "original" ? "Original" : s.label), url: s.url }));
+  if (!out.length && l.stream_url && /^https:\/\//.test(l.stream_url)) out.push({ label: "Original", url: l.stream_url });
+  return out;
+}
+
 /** First usable image as the thumbnail, the rest as fallbacks. */
 function thumbs(urls: (string | null | undefined)[]) {
   const list = [...new Set(urls.filter((u): u is string => !!u).map((u) => (u.startsWith("/") ? u : media(u)!)))];
@@ -138,6 +160,8 @@ export function buildDataset(raw: RawData, now: number): Dataset {
   const live: LiveStream[] = raw.live.map((l) => {
     const member = resolve(l.url_key, l.name, l.img);
     const platform = l.platform === "idn" ? "IDN Live" : "SHOWROOM";
+    const idn = l.platform === "idn";
+    const sources = idn ? [] : sourcesOf(l);
     return {
       id: `live:${l.platform}:${l.url_key}:${l.started_at ?? ""}`,
       memberSlug: member.slug,
@@ -145,9 +169,12 @@ export function buildDataset(raw: RawData, now: number): Dataset {
       title: l.title?.trim() || `${member.nickname} on ${platform}`,
       status: "live",
       startedAt: l.started_at || new Date(now).toISOString(),
-      url: l.stream_url || null,
+      viewers: l.viewers ?? undefined,
+      url: idn ? (l.slug ? idnLiveLink(l.url_key, l.slug) : `https://www.idn.app/${l.url_key}`) : null,
+      watchPath: !idn && sources.length ? `/watch/${member.slug}` : undefined,
+      sources: sources.length ? sources : undefined,
       replayUrl: null,
-      thumbnailUrl: media(l.img) ?? member.photoUrl,
+      thumbnailUrl: media(l.thumbnail) ?? media(l.img) ?? member.photoUrl,
     };
   });
   const liveSlugs = new Set(live.map((l) => l.memberSlug));

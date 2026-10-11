@@ -29,12 +29,22 @@ export interface ApiMember {
 /** GET /api/v1/live → data[] */
 export interface ApiLive {
   name: string;
+  /** IDN username (e.g. "jkt48_michie") or SHOWROOM room key. */
   url_key: string;
   platform: "showroom" | "idn";
   img: string;
+  img_alt?: string | null;
   stream_url: string | null;
+  /** Available qualities, e.g. SHOWROOM's original / medium / low. */
+  streaming?: { label: string; quality: number; url: string }[] | null;
   started_at: string;
-  title?: string;
+  /** IDN live slug, e.g. "hi-261011192644" (null on SHOWROOM). */
+  slug?: string | null;
+  /** SHOWROOM room id (0 on IDN). */
+  room_id?: number | null;
+  viewers?: number | null;
+  title?: string | null;
+  thumbnail?: string | null;
 }
 
 /** Envelope every endpoint returns. */

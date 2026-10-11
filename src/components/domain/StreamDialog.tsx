@@ -4,7 +4,25 @@ import { SourceNote } from "./SourceNote";
 import { Button, Dialog } from "@/components/ui";
 import { api, type LiveItem } from "@/services";
 import { formatDateTime, formatDuration, formatRelative } from "@/utils/format";
-import { Link } from "react-router";
+import { useCallback, useState } from "react";
+import { Link, useNavigate } from "react-router";
+
+/**
+ * Opening a stream: a SHOWROOM live with an on-site player goes straight to
+ * its watch page; everything else opens the details dialog.
+ */
+export function useStreamOpener() {
+  const [stream, setStream] = useState<LiveItem | null>(null);
+  const navigate = useNavigate();
+  const open = useCallback(
+    (item: LiveItem | null) => {
+      if (item?.status === "live" && item.watchPath) navigate(item.watchPath, { viewTransition: true });
+      else setStream(item);
+    },
+    [navigate],
+  );
+  return { stream, open, close: useCallback(() => setStream(null), []) };
+}
 
 /**
  * Stream details + the outbound action. When the source has no stream URL the
@@ -17,6 +35,7 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
   // Finished streams get no outbound button (replays are not linked).
   const room = stream && (stream.platform === "IDN Live" ? (stream.member.idnUsername ? `https://www.idn.app/${stream.member.idnUsername}` : null) : stream.member.socials.find((x) => x.title === "SHOWROOM")?.url);
   const href = stream && live ? (stream.url ?? room) : null;
+  const watch = stream && live ? stream.watchPath : undefined;
   return (
     <Dialog
       open={!!stream}
@@ -29,7 +48,11 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
             <Button variant="ghost" onClick={onClose}>
               Close
             </Button>
-            {href ? (
+            {watch ? (
+              <Link to={watch} viewTransition onClick={onClose} className="btn btn--primary btn--md">
+                <span className="btn__label">Watch now</span>
+              </Link>
+            ) : href ? (
               <a className="btn btn--primary btn--md" href={href} target="_blank" rel="noreferrer noopener">
                 <span className="btn__label">Open on {stream.platform}</span>
               </a>
