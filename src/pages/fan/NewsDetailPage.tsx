@@ -5,6 +5,7 @@ import { NewsRow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, Icon, Skeleton } from "@/components/ui";
 import { SourceNote } from "@/components/domain/SourceNote";
+import { retryOrigin } from "@/utils/media";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { useEntrance } from "@/motion/hooks";
@@ -55,13 +56,13 @@ export default function NewsDetailPage() {
               </h1>
               {d.article.image && (
                 <figure className="article__cover" data-in>
-                  <img src={d.article.image} alt="" referrerPolicy="no-referrer" />
+                  <img src={d.article.image} alt="" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget)} />
                 </figure>
               )}
               {d.article.content ? (
                 <>
                   {/* Sanitised in the data layer (allow-listed tags, no styles or scripts); images stay where the source put them. */}
-                  <div className="article__body prose" data-in dangerouslySetInnerHTML={{ __html: d.article.content }} />
+                  <div className="article__body prose" data-in onErrorCapture={(e) => e.target instanceof HTMLImageElement && retryOrigin(e.target)} dangerouslySetInnerHTML={{ __html: d.article.content }} />
                   <p className="article__origin meta" data-in>
                     Source:{" "}
                     <a className="link" href={d.article.url} target="_blank" rel="noreferrer noopener">

@@ -50,12 +50,17 @@ export function SiteHeader() {
     gsap.to(b, { x: r.left - p.left, width: r.width, autoAlpha: 1, scale: 1, duration: instant ? 0 : 0.45, ease: "elastic.out(1, 0.75)" });
   }, []);
   useLayoutEffect(() => moveBlob(null, true), [location.pathname, moveBlob]);
+  // Re-measure whenever the links change size: fonts arriving, the live
+  // count badge appearing, a resize.
   useEffect(() => {
-    const onResize = () => moveBlob(null, true);
-    window.addEventListener("resize", onResize);
-    document.fonts?.ready.then(onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [moveBlob]);
+    const list = nav.current;
+    if (!list) return;
+    const ro = new ResizeObserver(() => moveBlob(null, true));
+    list.querySelectorAll(".site-nav__link").forEach((el) => ro.observe(el));
+    ro.observe(list);
+    document.fonts?.ready.then(() => moveBlob(null, true));
+    return () => ro.disconnect();
+  }, [moveBlob, liveCount]);
 
   // Tuck away on scroll down, return on scroll up; tighten once off the top.
   useGSAP(

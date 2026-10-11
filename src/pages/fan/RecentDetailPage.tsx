@@ -4,15 +4,14 @@ import { Avatar, PlatformMark, StreamThumb } from "@/components/media/Media";
 import { StreamCard } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { SourceNote } from "@/components/domain/SourceNote";
-import { Breadcrumb, ButtonLink, EmptyState, ErrorState, Icon, Skeleton } from "@/components/ui";
+import { Breadcrumb, ButtonLink, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { retryOrigin } from "@/utils/media";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { enter, gsap, useGSAP } from "@/motion/gsap";
 import { useEntrance } from "@/motion/hooks";
 import { api } from "@/services";
 import { compact, formatDuration, formatLongDate, formatTime, nf } from "@/utils/format";
-
-const youtubeId = (url: string | null) => url?.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{6,})/)?.[1] ?? null;
 
 /** Big number that counts up from zero when it scrolls into view. */
 function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
@@ -80,7 +79,6 @@ export default function RecentDetailPage() {
       </div>
     );
 
-  const yt = youtubeId(s?.replayUrl ?? null);
   const st = s?.stats;
   const gifts = st?.giftSummary.slice(0, 12) ?? [];
   const senders = st?.topSenders.slice(0, 10) ?? [];
@@ -117,12 +115,6 @@ export default function RecentDetailPage() {
                   {s.endedAt && <span>{formatDuration(s.startedAt, s.endedAt)}</span>}
                 </p>
                 <div className="actions-row" data-in>
-                  {s.replayUrl && (
-                    <a className="btn btn--primary btn--md" href={s.replayUrl} target="_blank" rel="noreferrer noopener">
-                      <span className="btn__label">Watch replay</span>
-                      <Icon name="arrowUpRight" size={16} />
-                    </a>
-                  )}
                   <ShareButton />
                 </div>
                 <div data-in>
@@ -164,25 +156,6 @@ export default function RecentDetailPage() {
           </section>
         )}
 
-        {yt && (
-          <section className="rd-section" aria-labelledby="rd-replay">
-            <div className="section-head">
-              <h2 id="rd-replay" className="h-section">
-                Replay
-              </h2>
-            </div>
-            <div className="rd-video">
-              <iframe
-                src={`https://www.youtube-nocookie.com/embed/${yt}`}
-                title={`${s?.member.nickname} — ${s?.title} (replay)`}
-                loading="lazy"
-                allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </section>
-        )}
-
         {st && (gifts.length > 0 || senders.length > 0) && (
           <div className="rd-lists" ref={lists}>
             {gifts.length > 0 && (
@@ -196,7 +169,7 @@ export default function RecentDetailPage() {
                 <ul className="gifts">
                   {gifts.map((g, k) => (
                     <li key={`${g.name}-${k}`} className="gift">
-                      <span className="gift__icon">{g.image ? <img src={g.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} /> : null}</span>
+                      <span className="gift__icon">{g.image ? <img src={g.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => (e.currentTarget.style.visibility = "hidden"))} /> : null}</span>
                       <span className="gift__name">{g.name.replace(/\(anime\)|\(free\)/g, "").trim()}</span>
                       <span className="gift__count num">×{nf.format(g.count)}</span>
                       <span className="gift__value meta">{g.gold ? `${compact.format(g.gold)} gold` : `${compact.format(g.points)} pts`}</span>
@@ -216,7 +189,7 @@ export default function RecentDetailPage() {
                   {senders.map((t, k) => (
                     <li key={`${t.name}-${k}`} className="sender">
                       <span className="sender__pos num">{String(k + 1).padStart(2, "0")}</span>
-                      <span className="sender__avatar">{t.avatar ? <img src={t.avatar} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.display = "none")} /> : null}
+                      <span className="sender__avatar">{t.avatar ? <img src={t.avatar} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => (e.currentTarget.style.display = "none"))} /> : null}
                         <span className="sender__initial">{t.name[0]}</span></span>
                       <span className="sender__main">
                         <span className="sender__name">{t.name}</span>

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LivePlatform, LiveStream, Member, TheaterShow } from "@/types";
 import { cx } from "@/utils/format";
+import { retryOrigin } from "@/utils/media";
 import { teamColor } from "@/utils/team";
 
 /*
@@ -15,7 +16,7 @@ export const oshi = (m: Pick<Member, "color">) => ({ ["--oshi" as string]: m.col
 function Img({ src, alt, fallback, className, eager }: { src?: string; alt: string; fallback: ReactNode; className?: string; eager?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <>{fallback}</>;
-  return <img className={className} src={src} alt={alt} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return <img className={className} src={src} alt={alt} loading={eager ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => setFailed(true))} />;
 }
 
 export function MemberPhoto({ member, className, style, eager }: { member: Member; className?: string; style?: CSSProperties; eager?: boolean; compact?: boolean }) {
@@ -55,8 +56,8 @@ export function ShowArt({ show, className, banner }: { show: Pick<TheaterShow, "
     <span className={cx("media sa", className)} style={{ ["--oshi" as string]: teamColor(show.team) } as CSSProperties}>
       {src && !failed ? (
         <>
-          <img className="sa__bg" src={src} alt="" aria-hidden loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-          <img className="sa__img" src={src} alt={`${show.title} poster`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+          <img className="sa__bg" src={src} alt="" aria-hidden loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget)} />
+          <img className="sa__img" src={src} alt={`${show.title} poster`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => setFailed(true))} />
         </>
       ) : (
         <span className="sa__fallback" role="img" aria-label={`${show.title} (no poster)`}>

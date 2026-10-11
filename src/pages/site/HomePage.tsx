@@ -7,6 +7,7 @@ import { TodayTimeline } from "@/components/domain/TodayTimeline";
 import { ButtonLink, ErrorState, Icon, Skeleton } from "@/components/ui";
 import { formatCountdown, useClock } from "@/hooks/useClock";
 import { SourceNote } from "@/components/domain/SourceNote";
+import { retryOrigin } from "@/utils/media";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { enter, gsap, reducedMotion, useGSAP } from "@/motion/gsap";
@@ -127,7 +128,7 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
       <div className="intro__stripes">
         {tiles.map((m, k) => (
           <span key={k} className="intro__stripe" style={{ background: m?.color ?? TEAM_TINTS[k % TEAM_TINTS.length] }}>
-            {m && <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" onLoad={(e) => e.currentTarget.classList.add("is-in")} onError={(e) => (e.currentTarget.style.display = "none")} />}
+            {m && <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" onLoad={(e) => e.currentTarget.classList.add("is-in")} onError={(e) => retryOrigin(e.currentTarget, () => (e.currentTarget.style.display = "none"))} />}
             {grid && m && <span className="intro__tile-name">{m.nickname}</span>}
           </span>
         ))}
