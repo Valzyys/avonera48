@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate } from "react-router";
 import { Button, Dialog, ErrorState, Icon, SkeletonRows } from "@/components/ui";
-import { admin, ApiError, rupiah, type AdminPlan, type AdminVoucher, type Order, type PlanDraft } from "@/features/members/api";
+import { admin, ApiError, rupiah, type AdminPlan, type AdminUser, type AdminVoucher, type Order, type PlanDraft } from "@/features/members/api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { DashHead, useDash } from "@/layouts/DashboardLayout";
@@ -649,6 +649,7 @@ function Members() {
   const [plan, setPlan] = useState("");
   const [days, setDays] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [filter, setFilter] = useState<"active" | "all">("active");
 
   const grant = async (e: FormEvent) => {
     e.preventDefault();
@@ -663,8 +664,12 @@ function Members() {
     }
   };
 
+  const rows = (res.data ?? []).filter((m) => filter === "all" || Date.parse(m.expires_at) > Date.now());
+
   return (
     <>
+      <MemberLookup onChange={res.reload} />
+
       <section className="dash-panel">
         <h2 className="dash-panel__title">Give a membership</h2>
         <p className="meta">Adds days to a member’s pass without a payment (giveaways, refunds, staff).</p>
@@ -685,36 +690,196 @@ function Members() {
         </form>
         {msg && <p className={`form-msg ${msg.ok ? "is-ok" : "is-bad"}`}>{msg.text}</p>}
       </section>
+
       <section className="dash-panel">
-        <h2 className="dash-panel__title">Memberships</h2>
+        <div className="dash-panel__row">
+          <h2 className="dash-panel__title">Memberships</h2>
+          <div className="seg" role="tablist" aria-label="Filter memberships">
+            {(
+              [
+                ["active", "Active"],
+                ["all", "All"],
+              ] as const
+            ).map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={filter === k} className={cx(filter === k && "is-active")} onClick={() => setFilter(k)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         {!res.data ? (
           <SkeletonRows rows={4} />
-        ) : res.data.length ? (
-          <div className="tx-table" role="table">
-            {res.data.map((m) => {
-              const active = Date.parse(m.expires_at) > Date.now();
-              return (
-                <div key={m.user_id} className="tx-row tx-row--static" role="row">
-                  <span className="tx-buyer" role="cell">
-                    <b>{m.name ?? "Member"}</b>
-                    <span className="meta">{m.email ?? m.user_id}</span>
-                  </span>
-                  <span role="cell">{m.plan_name}</span>
-                  <span className="meta" role="cell">
-                    since {formatDate(m.started_at)}
-                  </span>
-                  <span role="cell">until {formatDate(m.expires_at)}</span>
-                  <span role="cell">
-                    <span className={`chip ${active ? "chip--ok" : "chip--mute"}`}>{active ? "Active" : "Ended"}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        ) : rows.length ? (
+          <ul className="mem-list">
+            {rows.map((m) => (
+              <li key={m.user_id} className="mem-item">
+                <span className="mem-item__who">
+                  <b>{m.name ?? "Member"}</b>
+                  <span className="meta">{m.email ?? m.user_id}</span>
+                </span>
+                <PassControls uid={m.user_id} membership={m} onChange={res.reload} />
+              </li>
+            ))}
+          </ul>
         ) : (
-          <p className="meta">No memberships yet.</p>
+          <p className="meta">{filter === "active" ? "No active memberships." : "No memberships yet."}</p>
         )}
       </section>
     </>
+  );
+}
+
+/** Find one account by email: its pass and its show tickets. */
+function MemberLookup({ onChange }: { onChange: () => void }) {
+  const [email, setEmail] = useState("");
+  const [found, setFound] = useState<AdminUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async (address = email) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setFound(await admin.user(address.trim()));
+    } catch (err) {
+      setFound(null);
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const refresh = () => {
+    if (found) load(found.user.email);
+    onChange();
+  };
+
+  const dropTicket = async (show: string) => {
+    if (!found || !window.confirm("Take this ticket away? The member loses access to that show.")) return;
+    try {
+      await admin.revokeTicket(found.user.id, show);
+      refresh();
+    } catch (err) {
+      setError(errText(err));
+    }
+  };
+
+  return (
+    <section className="dash-panel">
+      <h2 className="dash-panel__title">Find a member</h2>
+      <p className="meta">Look up an account to change or take away its membership and tickets.</p>
+      <form
+        className="admin-form admin-form--inline"
+        onSubmit={(e) => {
+          e.preventDefault();
+          load();
+        }}
+      >
+        <input className="dash-input" type="email" placeholder="Member email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Button type="submit" variant="secondary" icon="search" disabled={busy}>
+          {busy ? "Looking…" : "Look up"}
+        </Button>
+      </form>
+      {error && <p className="form-msg is-bad">{error}</p>}
+      {found && (
+        <div className="mem-card">
+          <div className="mem-card__head">
+            <span className="mem-item__who">
+              <b>{found.user.name}</b>
+              <span className="meta">
+                {found.user.email}
+                {found.user.createdAt ? ` · joined ${formatDate(found.user.createdAt)}` : ""}
+              </span>
+            </span>
+          </div>
+          <div className="mem-card__block">
+            <span className="mem-card__label">Membership</span>
+            {found.membership ? (
+              <PassControls uid={found.user.id} membership={found.membership} onChange={refresh} />
+            ) : (
+              <p className="meta">No membership. Use “Give a membership” below.</p>
+            )}
+          </div>
+          <div className="mem-card__block">
+            <span className="mem-card__label">Show tickets · {found.tickets.length}</span>
+            {found.tickets.length ? (
+              <ul className="mem-tickets">
+                {found.tickets.map((t) => (
+                  <li key={t.show_slug}>
+                    <span>
+                      <b>{t.title ?? t.show_slug}</b>
+                      <span className="meta"> · since {formatDate(t.created_at)}</span>
+                    </span>
+                    <Button size="sm" variant="ghost" onClick={() => dropTicket(t.show_slug)}>
+                      Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="meta">No tickets.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Status of one pass with the controls to lengthen, shorten, end-date or revoke it. */
+function PassControls({ uid, membership, onChange }: { uid: string; membership: { plan_name: string; started_at: string; expires_at: string }; onChange: () => void }) {
+  const [until, setUntil] = useState(membership.expires_at.slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const active = Date.parse(membership.expires_at) > Date.now();
+  const left = Math.max(0, Math.ceil((Date.parse(membership.expires_at) - Date.now()) / 86400000));
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      onChange();
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pass-ctl">
+      <span className="pass-ctl__status">
+        <span className={`chip ${active ? "chip--ok" : "chip--mute"}`}>{active ? `${left} day${left === 1 ? "" : "s"} left` : "Ended"}</span>
+        <span className="meta">
+          {membership.plan_name} · until {formatDate(membership.expires_at)}
+        </span>
+      </span>
+      <span className="pass-ctl__actions">
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => admin.adjust(uid, { add_days: -7 }))}>
+          −7d
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => admin.adjust(uid, { add_days: 7 }))}>
+          +7d
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => admin.adjust(uid, { add_days: 30 }))}>
+          +30d
+        </Button>
+        <span className="pass-ctl__date">
+          <input className="dash-input" type="date" value={until} onChange={(e) => setUntil(e.target.value)} aria-label="Last day" />
+          <Button size="sm" variant="secondary" disabled={busy || !until} onClick={() => run(() => admin.adjust(uid, { until }))}>
+            Set
+          </Button>
+        </span>
+        <Button
+          size="sm"
+          variant="danger"
+          disabled={busy}
+          onClick={() => window.confirm("Revoke this membership now? The member loses access to every show it covered.") && run(() => admin.revoke(uid))}
+        >
+          Revoke
+        </Button>
+      </span>
+      {error && <span className="form-msg is-bad">{error}</span>}
+    </div>
   );
 }

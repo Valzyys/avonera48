@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import type { CheckoutItem } from "@/components/domain/CheckoutDialog";
 import { Icon } from "@/components/ui";
+import { formatCountdown } from "@/hooks/useClock";
 import { accessOf, priceOf, rupiah, type Catalog, type OrderStatus } from "@/features/members/api";
 import type { DashShow } from "@/features/members/stage";
 import type { ShowSummary } from "@/services/types";
@@ -64,5 +65,32 @@ export function ShowAction({ show, catalog, now, onBuy, size = "md" }: { show: S
       <Icon name="ticket" size={16} />
       {price === 0 ? "Get free ticket" : `Buy · ${rupiah(price)}`}
     </button>
+  );
+}
+
+/** Days / hours / minutes / seconds until a show starts. */
+export function Countdown({ to, now }: { to: string; now: number }) {
+  const c = formatCountdown(Date.parse(to) - now);
+  return (
+    <div className="countdown" role="timer" aria-label="Time until the show">
+      {c.d > 0 && (
+        <span>
+          <b className="num">{c.d}</b>
+          <small>days</small>
+        </span>
+      )}
+      <span>
+        <b className="num">{c.h}</b>
+        <small>hrs</small>
+      </span>
+      <span>
+        <b className="num">{c.m}</b>
+        <small>min</small>
+      </span>
+      <span>
+        <b className="num">{c.s}</b>
+        <small>sec</small>
+      </span>
+    </div>
   );
 }

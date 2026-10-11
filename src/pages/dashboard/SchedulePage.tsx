@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 import { CheckoutDialog, type CheckoutItem } from "@/components/domain/CheckoutDialog";
 import { LineupAvatars } from "@/components/domain/Cards";
 import { ShowArt } from "@/components/media/Media";
@@ -71,7 +72,7 @@ export default function SchedulePage() {
             const price = priceOf(catalog, s.slug);
             return (
               <article key={s.slug} className={cx("sched-card", live && "is-live")}>
-                <div className="sched-card__art">
+                <Link to={`/dashboard/schedule/${s.slug}`} className="sched-card__art" aria-label={`${s.title}: details`}>
                   <ShowArt show={s} use="banner" />
                   <span className="sched-card__date">
                     <b className="num">{formatDate(s.startsAt, { day: "numeric", month: undefined, year: undefined })}</b>
@@ -83,10 +84,12 @@ export default function SchedulePage() {
                       {s.viewers > 0 && <span className="sched-card__viewers">· {s.viewers.toLocaleString("id-ID")} watching</span>}
                     </span>
                   )}
-                </div>
+                </Link>
                 <div className="sched-card__body">
                   <span className="sched-card__team">{teamLabel(s.team)}</span>
-                  <h2 className="sched-card__title">{s.title}</h2>
+                  <h2 className="sched-card__title">
+                    <Link to={`/dashboard/schedule/${s.slug}`}>{s.title}</Link>
+                  </h2>
                   <p className="meta">
                     {formatWeekday(s.startsAt)} · {formatTime(s.startsAt)} WIB
                     {s.birthday ? ` · Birthday: ${s.birthday}` : s.birthdayShow && " · Birthday show"}
