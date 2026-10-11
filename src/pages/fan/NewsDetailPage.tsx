@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link, useParams } from "react-router";
 import { Avatar } from "@/components/media/Media";
 import { NewsRow } from "@/components/domain/Cards";
@@ -5,6 +6,7 @@ import { ShareButton } from "@/components/domain/ShareButton";
 import { Badge, Breadcrumb, ButtonLink, Callout, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
+import { useEntrance } from "@/motion/hooks";
 import { api } from "@/services";
 import { formatLongDate } from "@/utils/format";
 
@@ -13,6 +15,8 @@ export default function NewsDetailPage() {
   const res = useResource(() => api.getNews(slug), [slug]);
   const d = res.data;
   useDocumentTitle(d ? d.article.title : "News");
+  const art = useRef<HTMLElement>(null);
+  useEntrance(art, [!!d, slug]);
 
   if (res.status === "error") return <div className="container page-body"><ErrorState error={res.error} onRetry={res.reload} /></div>;
   if (res.status === "success" && !d)
@@ -28,7 +32,7 @@ export default function NewsDetailPage() {
         <div className="detail-top">
           <Breadcrumb items={[{ label: "News", to: "/news" }, { label: d?.article.category ?? "…" }]} />
         </div>
-        <article className="article">
+        <article className="article" ref={art}>
           {!d ? (
             <>
               <Skeleton height={20} width={220} />
@@ -37,7 +41,7 @@ export default function NewsDetailPage() {
             </>
           ) : (
             <>
-              <div className="article__meta enter">
+              <div className="article__meta" data-in>
                 <Link to={`/news?category=${d.article.category}`} viewTransition>
                   <Badge>{d.article.category}</Badge>
                 </Link>
@@ -45,13 +49,13 @@ export default function NewsDetailPage() {
                   {formatLongDate(d.article.publishedAt)}
                 </time>
               </div>
-              <h1 className="h-page enter" style={{ ["--i" as string]: 1 }}>
+              <h1 className="h-page" data-in>
                 {d.article.title}
               </h1>
-              <p className="lead article__summary enter" style={{ ["--i" as string]: 2 }}>
+              <p className="lead article__summary" data-in>
                 {d.article.summary}
               </p>
-              <div className="article__body prose enter" style={{ ["--i" as string]: 3 }}>
+              <div className="article__body prose" data-in>
                 <Callout title="Placeholder article">This is preview content. It is not an official JKT48 announcement.</Callout>
                 {d.article.body.map((p, k) => (
                   <p key={k}>{p}</p>

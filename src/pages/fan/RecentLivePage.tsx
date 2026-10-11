@@ -39,7 +39,7 @@ export default function RecentLivePage() {
 
   return (
     <div className="page">
-      <PageHeader title="Recent live" lead="Finished streams, newest first. Replays are linked only when the platform provides one." aside={<PreviewTag>Sample data</PreviewTag>} />
+      <PageHeader label="Archive" title="Recent live" lead="Finished streams, newest first. Replays are linked only when the platform provides one." aside={<PreviewTag>Sample data</PreviewTag>} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs

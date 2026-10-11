@@ -18,7 +18,7 @@ export default function NewsPage() {
 
   return (
     <div className="page">
-      <PageHeader title="News" lead="Theater updates, releases, events and announcements." aside={<PreviewTag>Placeholder articles</PreviewTag>} />
+      <PageHeader label="Information" title="News" lead="Theater updates, releases, events and announcements." aside={<PreviewTag>Placeholder articles</PreviewTag>} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs label="Category" value={cat} onChange={(c) => setParams(c === "all" ? {} : { category: c }, { replace: true })} items={CATS.map((c) => ({ id: c, label: c === "all" ? "All" : c }))} />

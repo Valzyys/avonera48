@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { MemberPhoto } from "@/components/media/Media";
+import { Flag, MemberPhoto } from "@/components/media/Media";
 import { MemberStatusBadge } from "@/components/domain/Badges";
 import { NewsRow, ShowRow, StreamCard, vtPhoto } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
@@ -8,6 +8,7 @@ import { StreamDialog } from "@/components/domain/StreamDialog";
 import { Badge, Breadcrumb, Button, ButtonLink, EmptyState, ErrorState, Icon, PreviewTag, Skeleton, Tabs } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
+import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
 import { api, type LiveItem } from "@/services";
 
 type Tab = "shows" | "lives" | "news";
@@ -22,6 +23,15 @@ export default function MemberDetailPage() {
   // photo morphs from the card while activity loads.
   const m = d?.member ?? api.peekMember(slug);
   useDocumentTitle(m ? m.name : "Member");
+  const info = useRef<HTMLDivElement>(null);
+  // Profile text arrives line by line beside the (morphing) name card.
+  useGSAP(
+    () => {
+      if (!m || reducedMotion()) return;
+      gsap.from(".profile__info > *", { autoAlpha: 0, y: 16, duration: 0.6, stagger: 0.06, delay: 0.15, clearProps: "transform,opacity,visibility" });
+    },
+    { scope: info, dependencies: [!!m, slug] },
+  );
 
   if (res.status === "error") return <div className="container page-body"><ErrorState error={res.error} onRetry={res.reload} /></div>;
   if (res.status === "success" && !d)
@@ -41,25 +51,25 @@ export default function MemberDetailPage() {
           <div className="profile__photo" style={vtPhoto(slug)}>
             {m ? <MemberPhoto member={m} /> : <Skeleton height="100%" />}
             {d?.isLive && (
-              <span className="live-tile__badge">
-                <span className="live-tile__dot" aria-hidden /> Live
-              </span>
+              <Flag tone="live" className="card-flag">
+                LIVE
+              </Flag>
             )}
           </div>
-          <div className="profile__info">
+          <div className="profile__info" ref={info}>
             {m ? (
               <>
-                <div className="profile__badges enter">
+                <div className="profile__badges">
                   <Badge>Generation {m.generation}</Badge>
                   <MemberStatusBadge status={m.status} />
                 </div>
-                <h1 className="h-page enter" style={{ ["--i" as string]: 1 }}>
+                <h1 className="h-page">
                   {m.name}
                 </h1>
-                <p className="profile__nick enter" style={{ ["--i" as string]: 1 }}>
+                <p className="profile__nick">
                   {m.nickname}
                 </p>
-                <dl className="facts enter" style={{ ["--i" as string]: 2 }}>
+                <dl className="facts">
                   <div>
                     <dt>Joined</dt>
                     <dd className="num">{m.joinedYear}</dd>
@@ -77,7 +87,7 @@ export default function MemberDetailPage() {
                     <dd className="num">{d ? d.recentLives.length : "–"}</dd>
                   </div>
                 </dl>
-                <div className="tag-list enter" style={{ ["--i" as string]: 3 }}>
+                <div className="tag-list">
                   {m.tags.map((t) => (
                     <Badge key={t}>{t}</Badge>
                   ))}

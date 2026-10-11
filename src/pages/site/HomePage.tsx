@@ -1,47 +1,188 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Avatar, MemberPhoto, PlatformMark, ShowArt } from "@/components/media/Media";
-import { LogoMark } from "@/components/layout/Logo";
-import { LineupAvatars, LiveTile, MemberCard, ShowRow, StreamCard, vtShow } from "@/components/domain/Cards";
+import { Avatar, Flag, MemberPhoto, PlatformMark, ShowArt, oshi } from "@/components/media/Media";
+import { LineupAvatars, LiveFor, ShowRow, StreamCard, vtShow } from "@/components/domain/Cards";
 import { StreamDialog } from "@/components/domain/StreamDialog";
-import { ButtonLink, EmptyState, ErrorState, Icon, PreviewTag, Skeleton, Tabs } from "@/components/ui";
+import { TodayTimeline } from "@/components/domain/TodayTimeline";
+import { ButtonLink, ErrorState, Icon, PreviewTag, Skeleton } from "@/components/ui";
 import { formatCountdown, useClock } from "@/hooks/useClock";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
+import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { useSectionReveal, useStagger } from "@/motion/hooks";
 import { api, type LiveItem, type ShowSummary } from "@/services";
 import { compact, formatDate, formatDuration, formatTime, formatWeekday } from "@/utils/format";
 
-const i = (n: number) => ({ ["--i" as string]: n }) as CSSProperties;
+const DAY = 86_400_000;
+const WIB = 7 * 3_600_000;
+const dayStartOf = (ms: number) => Math.floor((ms + WIB) / DAY) * DAY - WIB;
+const INTRO_KEY = "avn.intro.v5";
 
-function SectionHead({ id, title, to, cta, children }: { id?: string; title: string; to?: string; cta?: string; children?: ReactNode }) {
+/* ------------------------------------------------------------------ */
+/* Section heading: big uppercase word that rises out of a mask (GSAP) */
+
+function SectionHead({ id, title, desc, to, cta }: { id: string; title: string; desc?: string; to?: string; cta?: string }) {
   return (
-    <div className="section-head">
+    <div className="sh">
       <h2 id={id} className="h-section">
-        {title}
+        <span className="h-section__mask">
+          <span className="h-section__inner">{title}</span>
+        </span>
       </h2>
-      <div className="section-head__aside">
-        {children}
-        {to && (
-          <Link to={to} viewTransition className="more-link">
-            {cta} <Icon name="chevronRight" size={16} />
-          </Link>
-        )}
-      </div>
+      {desc && (
+        <p className="sh__desc" data-reveal>
+          {desc}
+        </p>
+      )}
+      {to && (
+        <Link to={to} viewTransition className="more-link sh__more" data-reveal>
+          {cta} <Icon name="arrowRight" size={14} />
+        </Link>
+      )}
     </div>
   );
 }
 
-/** Digits re-key on change so each new value slides in. */
-function Digits({ value }: { value: string }) {
+function Section({ id, children, band }: { id: string; children: ReactNode; band?: boolean }) {
+  const ref = useRef<HTMLElement>(null);
+  useSectionReveal(ref);
   return (
-    <span className="digits mono" aria-hidden>
-      {value.split("").map((ch, k) => (
-        <span key={`${k}-${ch}`} className="digits__d">
-          {ch}
-        </span>
-      ))}
-    </span>
+    <section ref={ref} className={`section ${band ? "band" : ""}`} aria-labelledby={id}>
+      {children}
+    </section>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* INTRO — member colours                                              */
+
+/**
+ * The members' oshi colours rise as a row of stripes and close over the
+ * page, the wordmark is set on top, then the stripes fall away in reverse
+ * order to reveal the board. GSAP timeline, ~1.7s, once per session,
+ * skippable, never shown with reduced motion.
+ */
+function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const members = useResource(() => api.listMembers({ sort: "generation" }), []);
+  const live = useResource(() => api.listLiveNow(), []);
+  const ready = !!members.data;
+
+  useGSAP(
+    () => {
+      if (!ready || !ref.current) return;
+      const stripes = ref.current.querySelectorAll(".intro__stripe");
+      const word = ref.current.querySelectorAll(".intro__char");
+      const meta = ref.current.querySelector(".intro__meta");
+      const plate = ref.current.querySelector(".intro__center");
+      const finish = () => {
+        tl.kill();
+        onDone();
+      };
+      // Paper covers the page; colours rise over it; the name plate opens;
+      // then the paper drops away and the stripes lift off the page while
+      // the hero builds itself underneath.
+      const tl = gsap.timeline({ onComplete: finish });
+      tl.from(stripes, { yPercent: 101, duration: 0.6, ease: "power3.inOut", stagger: { each: 0.03, from: "start" } })
+        .from(plate, { clipPath: "inset(0 50% 0 50%)", duration: 0.45, ease: "power3.inOut" }, "-=0.2")
+        .from(word, { yPercent: 110, duration: 0.55, ease: "power4.out", stagger: 0.035 }, "-=0.15")
+        .from(meta, { autoAlpha: 0, y: 8, duration: 0.35 }, "-=0.25")
+        .to({}, { duration: 0.25 })
+        .to(plate, { clipPath: "inset(0 50% 0 50%)", duration: 0.35, ease: "power3.in" })
+        .set(ref.current, { backgroundColor: "transparent" })
+        .call(onReveal)
+        .to(stripes, { yPercent: -101, duration: 0.7, ease: "power3.inOut", stagger: { each: 0.03, from: "end" } });
+
+      const skip = () => void tl.timeScale(4);
+      const el = ref.current;
+      el.addEventListener("pointerdown", skip);
+      window.addEventListener("keydown", skip, { once: true });
+      window.addEventListener("wheel", skip, { once: true, passive: true });
+      return () => {
+        el.removeEventListener("pointerdown", skip);
+        window.removeEventListener("keydown", skip);
+        window.removeEventListener("wheel", skip);
+      };
+    },
+    { scope: ref, dependencies: [ready] },
+  );
+
+  const colors = (members.data ?? []).filter((m) => m.status !== "graduated").map((m) => m.color);
+  return (
+    <div ref={ref} className="intro" aria-hidden>
+      <div className="intro__stripes">
+        {colors.map((c, k) => (
+          <span key={k} className="intro__stripe" style={{ background: c }} />
+        ))}
+      </div>
+      {ready && (
+        <div className="intro__center">
+          <span className="intro__word">
+            {"AVONERA48".split("").map((ch, k) => (
+              <span key={k} className="intro__mask">
+                <span className="intro__char">{ch}</span>
+              </span>
+            ))}
+          </span>
+          <span className="intro__meta">JKT48 fan site · {live.data ? `${live.data.length} live now` : "today"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* HERO — Today                                                         */
+
+function LiveCard({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveItem) => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  // Subtle pointer tilt (GSAP quickTo), mouse only.
+  useGSAP(
+    () => {
+      const el = ref.current;
+      if (!el || reducedMotion()) return;
+      const rx = gsap.quickTo(el, "rotationX", { duration: 0.5, ease: "power3.out" });
+      const ry = gsap.quickTo(el, "rotationY", { duration: 0.5, ease: "power3.out" });
+      const move = (e: PointerEvent) => {
+        if (e.pointerType !== "mouse") return;
+        const r = el.getBoundingClientRect();
+        ry(((e.clientX - r.left) / r.width - 0.5) * 10);
+        rx(-((e.clientY - r.top) / r.height - 0.5) * 10);
+      };
+      const leave = () => {
+        rx(0);
+        ry(0);
+      };
+      el.addEventListener("pointermove", move);
+      el.addEventListener("pointerleave", leave);
+      return () => {
+        el.removeEventListener("pointermove", move);
+        el.removeEventListener("pointerleave", leave);
+      };
+    },
+    { scope: ref },
+  );
+  return (
+    <button ref={ref} type="button" className="hero-card" onClick={() => onOpen(item)} style={oshi(item.member)}>
+      <span className="hero-card__photo">
+        <MemberPhoto member={item.member} />
+        <Flag tone="live" className="card-flag">
+          LIVE
+        </Flag>
+      </span>
+      <span className="hero-card__info">
+        <span className="hero-card__title">{item.title}</span>
+        <span className="hero-card__meta">
+          <PlatformMark platform={item.platform} />
+          <LiveFor since={item.startedAt} />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function Digits({ value }: { value: string }) {
+  return <span className="digits">{value}</span>;
 }
 
 function NextShow({ show }: { show: ShowSummary }) {
@@ -49,37 +190,32 @@ function NextShow({ show }: { show: ShowSummary }) {
   const left = new Date(show.startsAt).getTime() - now;
   const c = formatCountdown(left);
   return (
-    <Link to={`/theater/${show.slug}`} viewTransition className="next-show enter" style={i(2)}>
-      <span className="next-show__head">
-        <span className="meta">Next theater show</span>
-        <span className="meta num">
-          {formatWeekday(show.startsAt)} {formatDate(show.startsAt, { year: undefined })} · {formatTime(show.startsAt)}
-        </span>
-      </span>
+    <Link to={`/theater/${show.slug}`} viewTransition className="next-show">
+      <span className="label">Next show</span>
       <span className="next-show__countdown" role="timer" aria-label={`Starts in ${c.d} days ${c.h} hours ${c.m} minutes`}>
         {left > 0 ? (
           <>
             {c.d > 0 && (
               <span className="next-show__unit">
                 <Digits value={String(c.d)} />
-                <span className="meta">d</span>
+                <span className="meta">D</span>
               </span>
             )}
             <span className="next-show__unit">
               <Digits value={c.h} />
-              <span className="meta">h</span>
+              <span className="meta">H</span>
             </span>
             <span className="next-show__unit">
               <Digits value={c.m} />
-              <span className="meta">m</span>
+              <span className="meta">M</span>
             </span>
             <span className="next-show__unit">
               <Digits value={c.s} />
-              <span className="meta">s</span>
+              <span className="meta">S</span>
             </span>
           </>
         ) : (
-          <span className="next-show__started">Starting now</span>
+          <span className="next-show__started">On stage now</span>
         )}
       </span>
       <span className="next-show__show">
@@ -88,143 +224,270 @@ function NextShow({ show }: { show: ShowSummary }) {
         </span>
         <span className="next-show__info">
           <span className="h-card">{show.title}</span>
-          {show.center && (
-            <span className="next-show__center small">
-              <Avatar member={show.center} size={22} /> Center · {show.center.nickname}
-            </span>
-          )}
-          <LineupAvatars members={show.lineupMembers} max={7} size={26} />
+          <span className="meta">
+            {formatWeekday(show.startsAt)} {formatDate(show.startsAt, { year: undefined })} · {formatTime(show.startsAt)} WIB
+          </span>
+          <LineupAvatars members={show.lineupMembers} max={7} size={24} />
         </span>
-      </span>
-      <span className="next-show__cta">
-        Lineup & details <Icon name="arrowRight" size={16} />
       </span>
     </Link>
   );
 }
 
-function NowBoard({ onOpen }: { onOpen: (i: LiveItem) => void }) {
+function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone: boolean }) {
+  const ref = useRef<HTMLElement>(null);
+  const now = useClock();
+  const dayStart = dayStartOf(now);
   const live = useResource(() => api.listLiveNow(), []);
-  const shows = useResource(() => api.listShows("upcoming"), []);
-  const overview = useResource(() => api.getOverview(), []);
-  const next = shows.data?.[0];
-  const o = overview.data;
-  // Stage light behind the board, tinted by whoever is live.
-  const hues = (live.data ?? []).slice(0, 3).map((l) => l.member.hue);
-  const glow = { ["--g1" as string]: hues[0] ?? 220, ["--g2" as string]: hues[1] ?? hues[0] ?? 260, ["--g3" as string]: hues[2] ?? hues[0] ?? 200 } as CSSProperties;
+  const recent = useResource(() => api.listRecentLives(), []);
+  const shows = useResource(() => api.listShows(), []);
+  const bdays = useResource(() => api.listBirthdays(30), []);
+  const ready = !!(live.data && recent.data && shows.data);
+
+  const todayStreams = ready ? [...live.data!, ...recent.data!.filter((s) => new Date(s.startedAt).getTime() >= dayStart)] : [];
+  const todayShows = (shows.data ?? []).filter((s) => {
+    const t = new Date(s.startsAt).getTime();
+    return t >= dayStart && t < dayStart + DAY && s.status !== "cancelled";
+  });
+  const upcoming = (shows.data ?? []).filter((s) => s.status === "upcoming" && new Date(s.startsAt).getTime() > now);
+  const next = upcoming[0];
+  const liveCount = live.data?.length ?? 0;
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Asia/Jakarta" }).format(new Date(now));
+  const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(new Date(now));
+  const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Jakarta" }).format(new Date(now));
+
+  // Entrance: title lines rise from their masks, then cards, board, panels.
+  useGSAP(
+    () => {
+      if (!ready || !introDone || !ref.current || reducedMotion()) return;
+      const q = gsap.utils.selector(ref);
+      gsap
+        .timeline()
+        .from(q(".today__line > span"), { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.08 })
+        .from(q(".today__intro [data-in]"), { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.06, clearProps: "all" }, "-=0.55")
+        .from(q(".hero-card"), { autoAlpha: 0, y: 40, rotate: (k: number) => (k - 1) * 3, duration: 0.8, stagger: 0.09, ease: "power3.out", clearProps: "opacity,visibility,transform" }, "-=0.6")
+        .from(q(".today__board"), { autoAlpha: 0, y: 24, duration: 0.7, clearProps: "all" }, "-=0.45")
+        .from(q(".today__below > *"), { autoAlpha: 0, y: 20, duration: 0.6, stagger: 0.08, clearProps: "all" }, "-=0.35");
+    },
+    { scope: ref, dependencies: [ready, introDone] },
+  );
 
   return (
-    <section className="now" aria-labelledby="now-title" style={glow}>
-      <div className="now__glow" aria-hidden />
+    <section ref={ref} className="today" aria-labelledby="today-title">
       <div className="container">
-        <div className="now__intro">
-          <p className="meta now__eyebrow enter">
-            Unofficial JKT48 fan site <span aria-hidden>·</span> <PreviewTag>Preview with sample data</PreviewTag>
-          </p>
-          <h1 id="now-title" className="now__title">
-            <span className="enter" style={i(1)}>
-              Who&rsquo;s live,
-            </span>{" "}
-            <span className="enter" style={i(2)}>
-              what&rsquo;s on stage,
-            </span>{" "}
-            <span className="enter muted" style={i(3)}>
-              and everyone in between.
-            </span>
-          </h1>
-          <dl className="stats enter" style={i(4)}>
-            <Link to="/live" viewTransition className="stat">
-              <dt>Live now</dt>
-              <dd>
-                <span className="stat__num num">{o ? o.liveNow : "–"}</span>
-                <span className="live-tile__dot stat__live" aria-hidden />
-              </dd>
-            </Link>
-            <Link to="/recent-live" viewTransition className="stat">
-              <dt>Streams today</dt>
-              <dd className="stat__num num">{o ? o.streamsToday : "–"}</dd>
-            </Link>
-            <Link to="/theater" viewTransition className="stat">
-              <dt>Shows this week</dt>
-              <dd className="stat__num num">{o ? o.showsThisWeek : "–"}</dd>
-            </Link>
-            <a href="#birthdays-title" className="stat">
-              <dt>Birthdays this month</dt>
-              <dd className="stat__num num">{o ? o.birthdaysThisMonth : "–"}</dd>
-            </a>
-          </dl>
+        <div className="today__top">
+          <div className="today__intro">
+            <p className="label today__kicker" data-in>
+              Today in JKT48 <span className="today__clock mono">{clock} WIB</span>
+            </p>
+            <h1 id="today-title" className="today__title">
+              <span className="today__line">
+                <span>{weekday}</span>
+              </span>
+              <span className="today__line">
+                <span>{date}</span>
+              </span>
+            </h1>
+            <p className="today__summary" data-in>
+              {ready ? (
+                <>
+                  <span className="today__live">
+                    <span className="today__dot" aria-hidden /> {liveCount} {liveCount === 1 ? "member" : "members"} live
+                  </span>
+                  <span>{todayStreams.length} streams today</span>
+                  {next && (
+                    <span>
+                      <Link to={`/theater/${next.slug}`} viewTransition className="link">
+                        {next.title}
+                      </Link>{" "}
+                      {new Date(next.startsAt).getTime() < dayStart + DAY ? "tonight" : formatWeekday(next.startsAt)} {formatTime(next.startsAt)}
+                    </span>
+                  )}
+                </>
+              ) : (
+                " "
+              )}
+            </p>
+            <div className="today__actions" data-in>
+              <ButtonLink to="/live" viewTransition variant="primary" iconRight="arrowRight">
+                Watch live
+              </ButtonLink>
+              <ButtonLink to="/theater" viewTransition variant="secondary">
+                Theater schedule
+              </ButtonLink>
+            </div>
+            <p className="today__note" data-in>
+              <PreviewTag>Sample day — names, streams and shows are preview data</PreviewTag>
+            </p>
+          </div>
+
+          <div className="today__cards" aria-label="Members live now">
+            {live.data ? live.data.slice(0, 3).map((l) => <LiveCard key={l.id} item={l} onOpen={onOpen} />) : [0, 1, 2].map((k) => <Skeleton key={k} height={300} />)}
+          </div>
         </div>
 
-        <div className="now__grid">
-          <section className="now__live" aria-labelledby="live-title">
-            <SectionHead id="live-title" title="Live now" to="/live" cta="All live">
-              {live.data && (
-                <span className="live-count">
-                  <span className="live-tile__dot" aria-hidden /> <span className="num">{live.data.length}</span> streaming
-                </span>
-              )}
-            </SectionHead>
-            {live.status === "error" ? (
-              <ErrorState error={live.error} onRetry={live.reload} />
-            ) : !live.data ? (
-              <div className="live-grid">
-                {[0, 1, 2].map((k) => (
-                  <Skeleton key={k} height={360} />
-                ))}
-              </div>
-            ) : live.data.length === 0 ? (
-              <EmptyState icon="broadcast" title="Nobody is live right now" action={<ButtonLink to="/recent-live" size="sm" variant="secondary">See recent streams</ButtonLink>}>
-                Members usually stream in the evening.
-              </EmptyState>
-            ) : (
-              <div className="live-grid">
-                {live.data.slice(0, 3).map((item, k) => (
-                  <LiveTile key={item.id} item={item} onOpen={onOpen} index={k + 3} />
-                ))}
-              </div>
-            )}
-          </section>
+        <div className="today__board">
+          {ready ? (
+            <TodayTimeline dayStartMs={dayStart} now={now} streams={todayStreams} shows={todayShows} onOpen={onOpen} play={introDone} />
+          ) : (
+            <Skeleton height={330} />
+          )}
+        </div>
 
-          <aside className="now__side" aria-label="Theater">
-            {shows.status === "error" ? (
-              <ErrorState error={shows.error} onRetry={shows.reload} />
-            ) : !next ? (
-              <Skeleton height={420} />
+        <div className="today__below">
+          {next ? <NextShow show={next} /> : <Skeleton height={260} />}
+          <div className="panel">
+            <div className="panel__head">
+              <span className="label">Coming up</span>
+              <Link to="/theater" viewTransition className="more-link">
+                All <Icon name="arrowRight" size={14} />
+              </Link>
+            </div>
+            <ul className="later">
+              {upcoming.slice(1, 5).map((s) => (
+                <li key={s.slug}>
+                  <Link to={`/theater/${s.slug}`} viewTransition className="later__row">
+                    <span className="later__date">
+                      <span className="num">{formatDate(s.startsAt, { day: "2-digit", month: undefined, year: undefined })}</span>
+                      <span className="meta">{formatWeekday(s.startsAt)}</span>
+                    </span>
+                    <span className="later__main">
+                      <span className="later__title">{s.title}</span>
+                      <span className="meta">
+                        {formatTime(s.startsAt)} · {s.lineupMembers.length ? `${s.lineupMembers.length} members` : "lineup TBA"}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="panel">
+            <div className="panel__head">
+              <span className="label">Birthdays</span>
+            </div>
+            {bdays.data && bdays.data.length === 0 ? (
+              <p className="meta">No birthdays in the next 30 days.</p>
             ) : (
-              <>
-                <NextShow show={next} />
-                <ul className="later enter" style={i(4)}>
-                  {shows.data!.slice(1, 4).map((s) => (
-                    <li key={s.slug}>
-                      <Link to={`/theater/${s.slug}`} viewTransition className="later__row">
-                        <span className="later__date">
-                          <span className="meta">{formatWeekday(s.startsAt)}</span>
-                          <span className="num">{formatDate(s.startsAt, { day: "numeric", month: undefined, year: undefined })}</span>
-                        </span>
-                        <span className="later__main">
-                          <span className="later__title">{s.title}</span>
-                          <span className="meta mono">{formatTime(s.startsAt)}</span>
-                        </span>
-                        <Icon name="chevronRight" size={16} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </>
+              <ul className="bday">
+                {(bdays.data ?? []).slice(0, 4).map((b) => (
+                  <li key={b.member.slug}>
+                    <Link to={`/members/${b.member.slug}`} viewTransition className="bday__row">
+                      <span className="bday__date">
+                        <span className="num">{Number(b.date.slice(8))}</span>
+                        <span className="meta">{formatDate(`${b.date}T12:00:00+07:00`, { day: undefined, month: "short", year: undefined })}</span>
+                      </span>
+                      <Avatar member={b.member} size={32} />
+                      <span className="bday__name">{b.member.name}</span>
+                      <span className={`bday__when ${b.inDays <= 2 ? "is-soon" : ""}`}>{b.inDays === 0 ? "Today" : b.inDays === 1 ? "Tomorrow" : `${b.inDays} days`}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
-          </aside>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
+/* ------------------------------------------------------------------ */
+
+function Ranking() {
+  const top = useResource(() => api.listTopStreams(7, 5), []);
+  const news = useResource(() => api.listNews(), []);
+  const max = Math.max(1, ...(top.data ?? []).map((t) => t.viewers ?? 0));
+  const rankRef = useRef<HTMLOListElement>(null);
+  const newsRef = useRef<HTMLUListElement>(null);
+  useStagger(rankRef, [top.data]);
+  useStagger(newsRef, [news.data]);
+  // Bars grow from zero once the ranking scrolls into view.
+  useGSAP(
+    () => {
+      if (!rankRef.current || !top.data || reducedMotion()) return;
+      gsap.from(rankRef.current.querySelectorAll(".rank__bar span"), {
+        scaleX: 0,
+        transformOrigin: "left center",
+        duration: 1.1,
+        ease: "power3.out",
+        stagger: 0.08,
+        scrollTrigger: { trigger: rankRef.current, start: "top 85%", once: true },
+      });
+    },
+    { scope: rankRef, dependencies: [top.data] },
+  );
+
+  return (
+    <Section id="rank-title" band>
+      <div className="container split">
+        <div>
+          <SectionHead id="rank-title" title="Ranking" desc="Most watched streams, last 7 days" to="/recent-live" cta="History" />
+          {top.status === "error" ? (
+            <ErrorState error={top.error} onRetry={top.reload} />
+          ) : !top.data ? (
+            <Skeleton height={300} />
+          ) : (
+            <ol className="rank" ref={rankRef}>
+              {top.data.map((t, k) => (
+                <li key={t.id} className="rank__row" style={oshi(t.member)}>
+                  <span className="rank__pos">{String(k + 1).padStart(2, "0")}</span>
+                  <Avatar member={t.member} size={40} />
+                  <span className="rank__main">
+                    <Link to={`/members/${t.member.slug}`} viewTransition className="rank__name">
+                      {t.member.nickname}
+                    </Link>
+                    <span className="meta rank__title">
+                      {t.title} · {formatDuration(t.startedAt, t.endedAt!)}
+                    </span>
+                    <span className="rank__bar" aria-hidden>
+                      <span style={{ width: `${((t.viewers ?? 0) / max) * 100}%` }} />
+                    </span>
+                  </span>
+                  <span className="rank__val">
+                    <span className="num">{compact.format(t.viewers ?? 0)}</span>
+                    <span className="meta">peak</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+        <div>
+          <SectionHead id="news-title" title="News" desc="Theater, releases and events" to="/news" cta="All news" />
+          {news.status === "error" ? (
+            <ErrorState error={news.error} onRetry={news.reload} />
+          ) : !news.data ? (
+            <Skeleton height={300} />
+          ) : (
+            <ul className="news-list" ref={newsRef}>
+              {news.data.slice(0, 5).map((a) => (
+                <li key={a.slug}>
+                  <Link to={`/news/${a.slug}`} viewTransition className="news-row news-row--compact">
+                    <time className="news-row__date num" dateTime={a.publishedAt}>
+                      {formatDate(a.publishedAt, { year: "numeric", month: "2-digit", day: "2-digit" }).split("/").reverse().join(".")}
+                    </time>
+                    <span className="news-row__cat">{a.category}</span>
+                    <span className="news-row__title">{a.title}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function RecentStreams({ onOpen }: { onOpen: (i: LiveItem) => void }) {
   const res = useResource(() => api.listRecentLives(), []);
+  const track = useRef<HTMLUListElement>(null);
+  useStagger(track, [res.data], { y: 30, each: 0.06 });
   return (
-    <section className="section reveal" aria-labelledby="recent-title">
+    <Section id="recent-title">
       <div className="container">
-        <SectionHead id="recent-title" title="Recent streams" to="/recent-live" cta="Live history" />
+        <SectionHead id="recent-title" title="Archive" desc="Recent streams you might have missed" to="/recent-live" cta="Live history" />
       </div>
       {res.status === "error" ? (
         <div className="container">
@@ -232,286 +495,116 @@ function RecentStreams({ onOpen }: { onOpen: (i: LiveItem) => void }) {
         </div>
       ) : (
         <div className="shelf" role="region" aria-label="Recent streams — scroll sideways" tabIndex={0}>
-          <ul className="shelf__track">
+          <ul className="shelf__track" ref={track}>
             {(res.data ?? Array.from({ length: 5 }, () => null)).slice(0, 8).map((item, k) => (
               <li key={item?.id ?? k} className="shelf__item">
-                {item ? <StreamCard item={item} onOpen={onOpen} index={k} /> : <Skeleton height={250} />}
+                {item ? <StreamCard item={item} onOpen={onOpen} /> : <Skeleton height={250} />}
               </li>
             ))}
           </ul>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
-function ThisWeek() {
+function Schedule() {
   const res = useResource(() => api.listShows(), []);
+  const list = useRef<HTMLUListElement>(null);
   const shows = (res.data ?? []).filter((s) => s.status !== "completed").slice(0, 5);
+  useStagger(list, [res.data], { y: 12, each: 0.06 });
   return (
-    <section className="section band reveal" aria-labelledby="week-title">
+    <Section id="week-title" band>
       <div className="container">
-        <SectionHead id="week-title" title="Theater schedule" to="/theater" cta="Full schedule" />
+        <SectionHead id="week-title" title="Schedule" desc="Upcoming theater shows" to="/theater" cta="Full schedule" />
         {res.status === "error" ? (
           <ErrorState error={res.error} onRetry={res.reload} />
         ) : !res.data ? (
           <Skeleton height={300} />
         ) : (
-          <ul className="show-list">
-            {shows.map((s, k) => (
-              <ShowRow key={s.slug} show={s} index={k} withDate shareName={false} />
+          <ul className="show-list" ref={list}>
+            {shows.map((s) => (
+              <ShowRow key={s.slug} show={s} withDate shareName={false} />
             ))}
           </ul>
         )}
       </div>
-    </section>
+    </Section>
   );
 }
 
-function Members() {
-  const [gen, setGen] = useState("all");
+function Roster() {
   const gens = useResource(() => api.listGenerations(), []);
-  const res = useResource(() => api.listMembers({ status: undefined, generation: gen === "all" ? undefined : Number(gen), sort: "generation" }), [gen]);
+  const res = useResource(() => api.listMembers({ sort: "generation" }), []);
   const live = useResource(() => api.listLiveNow(), []);
   const liveSet = new Set(live.data?.map((l) => l.member.slug));
-  const list = (res.data ?? []).filter((m) => m.status !== "graduated").slice(0, 14);
+  const list = useRef<HTMLDivElement>(null);
+  useStagger(list, [res.data, gens.data], { y: 16, each: 0.07 });
   return (
-    <section className="section reveal" aria-labelledby="members-title">
+    <Section id="roster-title">
       <div className="container">
-        <SectionHead id="members-title" title="Members" to="/members" cta="Full directory">
-          <Tabs
-            segmented
-            label="Generation"
-            value={gen}
-            onChange={setGen}
-            items={[{ id: "all", label: "All" }, ...(gens.data ?? []).map((g) => ({ id: String(g.number), label: `Gen ${g.number}` }))]}
-          />
-        </SectionHead>
+        <SectionHead id="roster-title" title="Member" desc="Every member, by generation" to="/members" cta="Member directory" />
         {res.status === "error" ? (
           <ErrorState error={res.error} onRetry={res.reload} />
+        ) : !res.data || !gens.data ? (
+          <Skeleton height={300} />
         ) : (
-          <ul className={`member-grid ${res.status === "loading" ? "is-refreshing" : ""}`} key={gen}>
-            {list.map((m, k) => (
-              <MemberCard key={m.slug} member={m} live={liveSet.has(m.slug)} index={k} />
-            ))}
-          </ul>
+          <div className="roster" ref={list}>
+            {gens.data.map((g) => {
+              const members = res.data!.filter((m) => m.generation === g.number);
+              return (
+                <div key={g.number} className="roster__gen">
+                  <div className="roster__head">
+                    <span className="roster__num">{String(g.number).padStart(2, "0")}</span>
+                    <span className="label">Generation</span>
+                  </div>
+                  <ul className="roster__list">
+                    {members.map((m) => (
+                      <li key={m.slug}>
+                        <Link to={`/members/${m.slug}`} viewTransition className={`roster__member ${m.status === "graduated" ? "is-grad" : ""}`} style={oshi(m)}>
+                          <span className="roster__swatch" aria-hidden />
+                          <span className="roster__name">{m.name}</span>
+                          {liveSet.has(m.slug) && <Flag tone="live">LIVE</Flag>}
+                          {m.status === "trainee" && <span className="roster__note">Trainee</span>}
+                          {m.status === "graduated" && <span className="roster__note">Graduated</span>}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
-    </section>
-  );
-}
-
-function Digest() {
-  const top = useResource(() => api.listTopStreams(7, 5), []);
-  const bdays = useResource(() => api.listBirthdays(30), []);
-  const news = useResource(() => api.listNews(), []);
-  const max = Math.max(1, ...(top.data ?? []).map((t) => t.viewers ?? 0));
-  return (
-    <section className="section band reveal" aria-label="This week">
-      <div className="container digest">
-        <div className="digest__col" aria-labelledby="top-title">
-          <SectionHead id="top-title" title="Most watched · 7 days" to="/recent-live" cta="History" />
-          {top.status === "error" ? (
-            <ErrorState error={top.error} onRetry={top.reload} />
-          ) : !top.data ? (
-            <Skeleton height={300} />
-          ) : (
-            <ol className="rank">
-              {top.data.map((t, k) => (
-                <li key={t.id} className="rank__row enter" style={i(k)}>
-                  <span className="rank__pos num">{k + 1}</span>
-                  <Avatar member={t.member} size={36} />
-                  <span className="rank__main">
-                    <Link to={`/members/${t.member.slug}`} viewTransition className="rank__name">
-                      {t.member.nickname}
-                    </Link>
-                    <span className="meta rank__title">{t.title}</span>
-                    <span className="rank__bar" aria-hidden>
-                      <span style={{ width: `${((t.viewers ?? 0) / max) * 100}%` }} />
-                    </span>
-                  </span>
-                  <span className="rank__val">
-                    <span className="num">{compact.format(t.viewers ?? 0)}</span>
-                    <span className="meta">
-                      <PlatformMark platform={t.platform} /> {formatDuration(t.startedAt, t.endedAt!)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <div className="digest__col" aria-labelledby="birthdays-title">
-          <SectionHead id="birthdays-title" title="Birthdays" />
-          {bdays.status === "error" ? (
-            <ErrorState error={bdays.error} onRetry={bdays.reload} />
-          ) : !bdays.data ? (
-            <Skeleton height={300} />
-          ) : bdays.data.length === 0 ? (
-            <EmptyState icon="gift" title="No birthdays in the next 30 days" />
-          ) : (
-            <ul className="bday">
-              {bdays.data.slice(0, 5).map((b, k) => (
-                <li key={b.member.slug} className="enter" style={i(k)}>
-                  <Link to={`/members/${b.member.slug}`} viewTransition className="bday__row">
-                    <span className="bday__date">
-                      <span className="num">{Number(b.date.slice(8))}</span>
-                      <span className="meta">{formatDate(`${b.date}T12:00:00+07:00`, { day: undefined, month: "short", year: undefined })}</span>
-                    </span>
-                    <Avatar member={b.member} size={36} />
-                    <span className="bday__main">
-                      <span className="bday__name">{b.member.name}</span>
-                      <span className="meta">Gen {b.member.generation}</span>
-                    </span>
-                    <span className={`bday__when ${b.inDays === 0 ? "is-today" : ""}`}>{b.inDays === 0 ? "Today" : b.inDays === 1 ? "Tomorrow" : `in ${b.inDays} days`}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="digest__col" aria-labelledby="news-title">
-          <SectionHead id="news-title" title="News" to="/news" cta="All news" />
-          {news.status === "error" ? (
-            <ErrorState error={news.error} onRetry={news.reload} />
-          ) : !news.data ? (
-            <Skeleton height={300} />
-          ) : (
-            <ul className="digest-news">
-              {news.data.slice(0, 5).map((a, k) => (
-                <li key={a.slug} className="enter" style={i(k)}>
-                  <Link to={`/news/${a.slug}`} viewTransition className="digest-news__row">
-                    <span className="meta">
-                      {a.category} · {formatDate(a.publishedAt, { year: undefined })}
-                    </span>
-                    <span className="digest-news__title">{a.title}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const INTRO_KEY = "avn.intro.v3";
-
-/**
- * Roll call: every member's card washes in diagonally, the ones streaming
- * right now get their LIVE tag, the wordmark sits on a plate in the middle
- * with today's one-line status — then the sheet lifts to reveal the board.
- * ~1.6s, once per session; any click, key or scroll skips it; never shown
- * with reduced motion.
- */
-function Intro() {
-  const [phase, setPhase] = useState<"off" | "in" | "out">(() => {
-    try {
-      if (sessionStorage.getItem(INTRO_KEY) || matchMedia("(prefers-reduced-motion: reduce)").matches) return "off";
-      sessionStorage.setItem(INTRO_KEY, "1");
-    } catch {
-      return "off";
-    }
-    return "in";
-  });
-  const members = useResource(() => api.listMembers({ sort: "generation" }), []);
-  const live = useResource(() => api.listLiveNow(), []);
-  const shows = useResource(() => api.listShows("upcoming"), []);
-  const overview = useResource(() => api.getOverview(), []);
-  const ready = !!members.data;
-
-  useEffect(() => {
-    if (phase === "in") document.documentElement.classList.add("intro-playing");
-  }, [phase]);
-
-  useEffect(() => {
-    if (phase !== "in" || !ready) return;
-    const skip = () => setPhase("out");
-    const t = window.setTimeout(skip, 1650);
-    window.addEventListener("pointerdown", skip, { once: true });
-    window.addEventListener("keydown", skip, { once: true });
-    window.addEventListener("wheel", skip, { once: true, passive: true });
-    window.addEventListener("touchmove", skip, { once: true, passive: true });
-    return () => {
-      window.clearTimeout(t);
-      window.removeEventListener("pointerdown", skip);
-      window.removeEventListener("keydown", skip);
-      window.removeEventListener("wheel", skip);
-      window.removeEventListener("touchmove", skip);
-    };
-  }, [phase, ready]);
-
-  useEffect(() => {
-    if (phase !== "out") return;
-    document.documentElement.classList.remove("intro-playing");
-    const t = window.setTimeout(() => setPhase("off"), 650);
-    return () => window.clearTimeout(t);
-  }, [phase]);
-
-  if (phase === "off") return null;
-  const liveSet = new Set(live.data?.map((l) => l.member.slug));
-  const next = shows.data?.[0];
-  const cols = 6;
-  return (
-    <div className={`intro intro--${phase} ${ready ? "is-ready" : ""}`} aria-hidden>
-      <div className="intro__grid">
-        {(members.data ?? []).map((m, k) => {
-          const wave = (k % cols) + Math.floor(k / cols); // diagonal order
-          return (
-            <span key={m.slug} className="intro__card" style={i(wave)}>
-              <MemberPhoto member={m} />
-              {liveSet.has(m.slug) && (
-                <span className="intro__live">
-                  <span className="live-tile__dot" /> Live
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </div>
-      <div className="intro__plate">
-        <span className="intro__mark">
-          <LogoMark size={40} />
-        </span>
-        <span className="intro__word">
-          {"Avonera48".split("").map((ch, k) => (
-            <span key={k} style={i(k)}>
-              {ch}
-            </span>
-          ))}
-        </span>
-        <span className="intro__line">
-          <span className="intro__stat">
-            <span className="live-tile__dot" /> {live.data ? live.data.length : "–"} live now
-          </span>
-          {next && (
-            <span className="intro__stat">
-              Next show · {formatWeekday(next.startsAt)} {formatTime(next.startsAt)}
-            </span>
-          )}
-          {overview.data && <span className="intro__stat">{overview.data.birthdaysThisMonth} birthdays this month</span>}
-        </span>
-      </div>
-      <span className="intro__skip">Tap to skip</span>
-    </div>
+    </Section>
   );
 }
 
 export function HomePage() {
   useDocumentTitle("");
   const [stream, setStream] = useState<LiveItem | null>(null);
+  const [intro, setIntro] = useState(() => {
+    try {
+      if (sessionStorage.getItem(INTRO_KEY) || reducedMotion()) return false;
+      sessionStorage.setItem(INTRO_KEY, "1");
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  const [revealed, setRevealed] = useState(!intro);
   return (
     <div className="home">
-      <Intro />
-      <NowBoard onOpen={setStream} />
-      <Digest />
+      {intro && <Intro onReveal={() => setRevealed(true)} onDone={() => setIntro(false)} />}
+      <Today onOpen={setStream} introDone={revealed} />
+      <Ranking />
       <RecentStreams onOpen={setStream} />
-      <ThisWeek />
-      <Members />
+      <Schedule />
+      <Roster />
       <StreamDialog stream={stream} onClose={() => setStream(null)} />
     </div>
   );
 }
+
+export type { CSSProperties };

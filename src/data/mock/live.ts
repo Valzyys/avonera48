@@ -32,6 +32,7 @@ export const liveStreams: LiveStream[] = [
   s("lv-5503", "kirana", "SHOWROOM", "Trainee diary #12", [0, 15, 51], undefined, 1302),
   s("lv-5500", "larasati", "IDN Live", "Setlist trivia night", [0, 11, 0], [0, 12, 14], 3980),
   s("lv-5499", "cahya", "SHOWROOM", "Cooking attempt #4", [0, 8, 20], [0, 9, 2], 2210),
+  s("lv-5498", "ivana", "IDN Live", "Lunch break chat", [0, 12, 40], [0, 13, 25], 1890),
   s("lv-5497", "arunika", "IDN Live", "Backstage recap", [1, 21, 0], [1, 22, 5], 6390),
   s("lv-5496", "gendis", "IDN Live", "Morning stretch", [1, 7, 15], [1, 7, 52], 1540),
   s("lv-5495", "ivana", "SHOWROOM", "Acoustic request hour", [1, 20, 30], [1, 21, 40], 3105),

@@ -1,11 +1,13 @@
+import { useRef } from "react";
 import { Link, useParams } from "react-router";
-import { MemberPhoto, ShowArt } from "@/components/media/Media";
+import { Flag, MemberPhoto, ShowArt } from "@/components/media/Media";
 import { ShowStatusBadge } from "@/components/domain/Badges";
 import { vtShow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { Breadcrumb, ButtonLink, Callout, EmptyState, ErrorState, PreviewTag, Skeleton } from "@/components/ui";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
+import { useEntrance } from "@/motion/hooks";
 import { api } from "@/services";
 import { formatDate, formatLongDate, formatTime } from "@/utils/format";
 
@@ -18,6 +20,8 @@ export default function ShowDetailPage() {
   const all = useResource(() => api.listShows(), []);
   const sameSetlist = (all.data ?? []).filter((x) => show && x.setlist === show.setlist && x.slug !== slug).slice(0, 4);
   useDocumentTitle(show ? `${show.title} · ${formatDate(show.startsAt)}` : "Theater show");
+  const info = useRef<HTMLDivElement>(null);
+  useEntrance(info, [!!show, slug]);
 
   if (res.status === "error") return <div className="container page-body"><ErrorState error={res.error} onRetry={res.reload} /></div>;
   if (res.status === "success" && !d)
@@ -39,17 +43,17 @@ export default function ShowDetailPage() {
           <div className="show-hero__art" style={vtShow(slug)}>
             {show ? <ShowArt show={show} /> : <Skeleton height="100%" />}
           </div>
-          <div className="show-hero__info">
+          <div className="show-hero__info" ref={info}>
             {show ? (
               <>
-                <div className="show-hero__badges enter">
+                <div className="show-hero__badges" data-in>
                   <ShowStatusBadge status={show.status} />
                   <PreviewTag>Sample schedule</PreviewTag>
                 </div>
-                <h1 className="h-page enter" style={{ ["--i" as string]: 1 }}>
+                <h1 className="h-page" data-in>
                   {show.title}
                 </h1>
-                <dl className="facts enter" style={{ ["--i" as string]: 2 }}>
+                <dl className="facts" data-in>
                   <div>
                     <dt>Date</dt>
                     <dd>{formatLongDate(show.startsAt)}</dd>
@@ -67,7 +71,7 @@ export default function ShowDetailPage() {
                     <dd>{show.lineup.length ? `${show.lineup.length} members` : "Not announced"}</dd>
                   </div>
                 </dl>
-                <p className="lead enter" style={{ ["--i" as string]: 3 }}>
+                <p className="lead" data-in>
                   {show.description}
                 </p>
                 {show.note && <Callout tone={show.status === "cancelled" ? "danger" : "info"}>{show.note}</Callout>}
@@ -75,7 +79,7 @@ export default function ShowDetailPage() {
                   <ShareButton />
                 </div>
                 {sameSetlist.length > 0 && (
-                  <div className="other-dates enter" style={{ ["--i" as string]: 4 }}>
+                  <div className="other-dates" data-in>
                     <h2 className="meta">Other dates for {show.setlist}</h2>
                     <ul>
                       {sameSetlist.map((x) => (
@@ -118,13 +122,21 @@ export default function ShowDetailPage() {
             <ul className="lineup-grid">
               {[...d.lineupDetail]
                 .sort((a, b) => (a.role === "center" ? -1 : b.role === "center" ? 1 : 0))
-                .map((l, k) => (
-                  <li key={l.member.slug} className="enter" style={{ ["--i" as string]: k }}>
+                .map((l) => (
+                  <li key={l.member.slug}>
                     <Link to={`/members/${l.member.slug}`} viewTransition className="lineup-member">
                       <span className="lineup-member__photo">
                         <MemberPhoto member={l.member} />
-                        {l.role === "center" && <span className="role-tag">Center</span>}
-                        {l.role === "unit" && <span className="role-tag">Unit</span>}
+                        {l.role === "center" && (
+                          <Flag tone="ink" className="card-flag">
+                            CENTER
+                          </Flag>
+                        )}
+                        {l.role === "unit" && (
+                          <Flag tone="light" className="card-flag">
+                            UNIT
+                          </Flag>
+                        )}
                       </span>
                       <span className="lineup-member__name">{l.member.nickname}</span>
                       <span className="meta">Gen {l.member.generation}</span>

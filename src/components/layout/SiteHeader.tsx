@@ -62,8 +62,8 @@ export function SiteHeader() {
       <Dialog open={open} onClose={() => setOpen(false)} title="Menu" variant="drawer">
         <nav aria-label="Mobile" className="drawer-nav">
           <ul>
-            {[{ to: "/", label: "Home" }, ...primaryNav, { to: "/about", label: "About" }].map((item, i) => (
-              <li key={item.to} className="enter" style={{ ["--i" as string]: i + 2 }}>
+            {[{ to: "/", label: "Home" }, ...primaryNav, { to: "/about", label: "About" }].map((item) => (
+              <li key={item.to}>
                 <NavLink to={item.to} end={item.to === "/"} viewTransition className={({ isActive }) => cx("drawer-nav__link", isActive && "is-active")}>
                   {item.label === "Recent" ? "Recent live" : item.label}
                   {item.to === "/live" && liveCount > 0 && <span className="site-nav__count num">{liveCount}</span>}

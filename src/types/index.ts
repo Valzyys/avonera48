@@ -18,8 +18,10 @@ export interface Member {
   status: MemberStatus;
   /** Official photo URL when a real source provides one. Preview data has none. */
   photoUrl?: string;
-  /** Hue for the neutral placeholder tile shown when there is no photo. */
+  /** Hue for the placeholder tile shown when there is no photo. */
   hue: number;
+  /** Oshi color — the member's penlight color (fictional in preview data). */
+  color: string;
   /** Optional profile text. Preview records carry placeholder copy, never real biography. */
   bio: string;
   joinedYear: number;

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { Link } from "react-router";
-import { Avatar, MemberPhoto, PlatformMark, ShowArt, StreamThumb } from "@/components/media/Media";
+import { Avatar, Flag, MemberPhoto, PlatformMark, ShowArt, StreamThumb } from "@/components/media/Media";
 import { Icon } from "@/components/ui";
 import { formatClock, useClock } from "@/hooks/useClock";
 import { api, type LiveItem, type ShowSummary } from "@/services";
@@ -12,33 +12,25 @@ import { MemberStatusBadge, ShowStatusBadge } from "./Badges";
 export const vtPhoto = (slug: string): CSSProperties => ({ viewTransitionName: `photo-${slug}` });
 export const vtShow = (slug: string): CSSProperties => ({ viewTransitionName: `show-${slug}` });
 
-const slot = (i?: number) => (i === undefined ? undefined : ({ ["--i" as string]: i } as CSSProperties));
-
 /** Ticking "live for" timer, based on the data source clock. */
 export function LiveFor({ since }: { since: string }) {
   const now = useClock();
   return <span className="mono">{formatClock(now - new Date(since).getTime())}</span>;
 }
 
-export function LiveTile({ item, onOpen, index, size = "md" }: { item: LiveItem; onOpen: (i: LiveItem) => void; index?: number; size?: "md" | "lg" }) {
+export function LiveTile({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveItem) => void; index?: number; size?: "md" | "lg" }) {
   return (
-    <article className={cx("live-tile", `live-tile--${size}`, "enter")} style={slot(index)}>
+    <article className="live-tile">
       <div className="live-tile__media">
         <MemberPhoto member={item.member} />
-        <span className="live-tile__badge">
-          <span className="live-tile__dot" aria-hidden /> Live
-        </span>
+        <Flag tone="live" className="card-flag">
+          LIVE
+        </Flag>
         <span className="live-tile__time" aria-label="Live for">
           <LiveFor since={item.startedAt} />
         </span>
       </div>
       <div className="live-tile__body">
-        <p className="live-tile__name">
-          <Link to={`/members/${item.member.slug}`} viewTransition>
-            {item.member.nickname}
-          </Link>
-          <span className="meta">Gen {item.member.generation}</span>
-        </p>
         <p className="live-tile__title">{item.title}</p>
         <p className="live-tile__meta meta">
           <PlatformMark platform={item.platform} />
@@ -54,22 +46,22 @@ export function LiveTile({ item, onOpen, index, size = "md" }: { item: LiveItem;
   );
 }
 
-export function StreamCard({ item, onOpen, index }: { item: LiveItem; onOpen: (i: LiveItem) => void; index?: number }) {
+export function StreamCard({ item, onOpen }: { item: LiveItem; onOpen: (i: LiveItem) => void; index?: number }) {
   return (
-    <article className="stream-card enter" style={slot(index)}>
+    <article className="stream-card">
       <div className="stream-card__media">
         <StreamThumb stream={item} member={item.member} />
         <span className="stream-card__duration mono">{formatDuration(item.startedAt, item.endedAt!)}</span>
       </div>
       <div className="stream-card__body">
         <p className="stream-card__title">{item.title}</p>
-        <p className="small">
+        <p className="stream-card__meta meta">
           <Link to={`/members/${item.member.slug}`} viewTransition className="stream-card__member">
             {item.member.name}
           </Link>
-        </p>
-        <p className="stream-card__meta meta">
+          <span>·</span>
           <PlatformMark platform={item.platform} />
+          <span>·</span>
           <span>{formatRelative(item.startedAt, api.now)}</span>
         </p>
       </div>
@@ -82,7 +74,7 @@ export function StreamCard({ item, onOpen, index }: { item: LiveItem; onOpen: (i
   );
 }
 
-export function LineupAvatars({ members, max = 6, size = 28 }: { members: Member[]; max?: number; size?: number }) {
+export function LineupAvatars({ members, max = 6, size = 26 }: { members: Member[]; max?: number; size?: number }) {
   if (members.length === 0) return <span className="meta">Lineup not announced</span>;
   return (
     <span className="lineup-avatars" aria-label={`${members.length} members: ${members.map((m) => m.nickname).join(", ")}`}>
@@ -94,21 +86,21 @@ export function LineupAvatars({ members, max = 6, size = 28 }: { members: Member
   );
 }
 
-/** Schedule row: time · show · lineup · status. Used in every schedule list. */
-export function ShowRow({ show, index, withDate = false, shareName = true }: { show: ShowSummary; index?: number; withDate?: boolean; shareName?: boolean }) {
+/** Schedule row: time · show · lineup · status. */
+export function ShowRow({ show, withDate = false, shareName = true }: { show: ShowSummary; index?: number; withDate?: boolean; shareName?: boolean }) {
   return (
-    <li className="enter" style={slot(index)}>
+    <li>
       <Link to={`/theater/${show.slug}`} viewTransition className={cx("show-row", `is-${show.status}`)}>
         <span className="show-row__time">
           {withDate && <span className="show-row__date">{formatDate(show.startsAt, { year: undefined })}</span>}
-          <span className="mono">{formatTime(show.startsAt)}</span>
+          <span className="show-row__clock">{formatTime(show.startsAt)}</span>
         </span>
         <span className="show-row__art" style={shareName ? vtShow(show.slug) : undefined}>
           <ShowArt show={show} />
         </span>
         <span className="show-row__main">
           <span className="show-row__title">{show.title}</span>
-          <span className="meta">{show.center ? `Center: ${show.center.nickname}` : show.lineupMembers.length ? `${show.lineupMembers.length} members` : "Lineup not announced"}</span>
+          <span className="meta">{show.center ? `Center · ${show.center.nickname}` : show.lineupMembers.length ? `${show.lineupMembers.length} members` : "Lineup not announced"}</span>
         </span>
         <span className="show-row__lineup">
           <LineupAvatars members={show.lineupMembers} max={6} />
@@ -122,40 +114,36 @@ export function ShowRow({ show, index, withDate = false, shareName = true }: { s
   );
 }
 
-export function MemberCard({ member, live, index }: { member: Member; live?: boolean; index?: number }) {
+export function MemberCard({ member, live }: { member: Member; live?: boolean; index?: number }) {
   return (
-    <li className="member-card enter" style={slot(index)}>
+    <li className="member-card">
       <Link to={`/members/${member.slug}`} viewTransition className="member-card__link">
         <span className="member-card__photo" style={vtPhoto(member.slug)}>
           <MemberPhoto member={member} />
           {live && (
-            <span className="live-tile__badge member-card__live">
-              <span className="live-tile__dot" aria-hidden /> Live
-            </span>
+            <Flag tone="live" className="card-flag">
+              LIVE
+            </Flag>
           )}
         </span>
-        <span className="member-card__name">{member.name}</span>
         <span className="member-card__meta meta">
-          Gen {member.generation}
-          {member.status !== "active" && <MemberStatusBadge status={member.status} />}
+          {member.status !== "active" ? <MemberStatusBadge status={member.status} /> : <span>Joined {member.joinedYear}</span>}
         </span>
       </Link>
     </li>
   );
 }
 
-export function NewsRow({ article, index }: { article: NewsArticle; index?: number }) {
+export function NewsRow({ article }: { article: NewsArticle; index?: number }) {
   return (
-    <li className="enter" style={slot(index)}>
+    <li>
       <Link to={`/news/${article.slug}`} viewTransition className="news-row">
-        <time className="news-row__date meta num" dateTime={article.publishedAt}>
-          {formatDate(article.publishedAt, { year: undefined })}
+        <time className="news-row__date num" dateTime={article.publishedAt}>
+          {formatDate(article.publishedAt, { year: "numeric", month: "2-digit", day: "2-digit" }).split("/").reverse().join(".")}
         </time>
-        <span className="news-row__main">
-          <span className="news-row__title">{article.title}</span>
-          <span className="news-row__summary small">{article.summary}</span>
-        </span>
-        <span className="news-row__cat badge">{article.category}</span>
+        <span className="news-row__cat">{article.category}</span>
+        <span className="news-row__title">{article.title}</span>
+        <Icon name="chevronRight" size={16} />
       </Link>
     </li>
   );

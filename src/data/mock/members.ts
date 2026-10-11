@@ -37,6 +37,28 @@ const seeds: Seed[] = [
 
 const debutYear: Record<number, number> = { 9: 2020, 10: 2021, 11: 2022, 12: 2023, 13: 2025 };
 
+/** Fictional penlight (oshi) colors for the preview. */
+const oshiColor: Record<string, string> = {
+  arunika: "#ff4f8b",
+  kalista: "#3d8bff",
+  sekar: "#9b8cff",
+  naira: "#ff8a3d",
+  ghea: "#e8455a",
+  tsabita: "#14b8a6",
+  larasati: "#a259ff",
+  felisha: "#f5b700",
+  cahya: "#22c55e",
+  ravena: "#94a3b8",
+  diandra: "#06b6d4",
+  elvaretta: "#ff6fb5",
+  gendis: "#84cc16",
+  ivana: "#6366f1",
+  jovanka: "#fb923c",
+  kirana: "#ec4899",
+  mayang: "#0ea5e9",
+  zahira: "#65a30d",
+};
+
 export const members: Member[] = seeds.map(([slug, name, nickname, generation, status, hue, tags, birthday]) => ({
   slug,
   name,
@@ -44,6 +66,7 @@ export const members: Member[] = seeds.map(([slug, name, nickname, generation, s
   generation,
   status,
   hue,
+  color: oshiColor[slug],
   tags,
   birthday,
   joinedYear: debutYear[generation],

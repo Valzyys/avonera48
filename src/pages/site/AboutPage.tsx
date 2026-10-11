@@ -5,7 +5,7 @@ export default function AboutPage() {
   useDocumentTitle("About");
   return (
     <div className="page">
-      <PageHeader title="About Avonera48" lead="A fan-made place to follow JKT48 live streams, theater shows, members and news." />
+      <PageHeader label="Fan site" title="About" lead="A fan-made place to follow JKT48 live streams, theater shows, members and news." />
       <div className="container page-body">
         <div className="prose">
           <h2>Unofficial</h2>

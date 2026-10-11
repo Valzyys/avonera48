@@ -14,15 +14,11 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  /* faint dot grid — the page reads as a sheet, not a void */
-  background:
-    radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 1.2px) 0 0 / 22px 22px,
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--fs-base);
-  line-height: 1.55;
-  font-feature-settings: "ss01", "cv11";
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -61,9 +57,10 @@ p {
 h1,
 h2,
 h3 {
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
   text-wrap: balance;
 }
 
@@ -85,8 +82,8 @@ ol {
 }
 
 ::selection {
-  background: var(--link-soft);
-  color: var(--text);
+  background: var(--text);
+  color: var(--bg);
 }
 
 .sr-only {
@@ -107,12 +104,10 @@ ol {
   left: 8px;
   z-index: var(--z-toast);
   padding: 8px 14px;
-  border-radius: var(--r-sm);
   background: var(--text);
   color: var(--bg);
   font-weight: 600;
   transform: translateY(-200%);
-  transition: transform var(--t-fast) var(--ease);
 }
 
 .skip-link:focus {
@@ -126,32 +121,46 @@ ol {
   padding-inline: var(--gutter);
 }
 
-/* ---------- type helpers ---------- */
+/* ---------- type ---------- */
+
+/* Section label: the official-site "NEWS / SCHEDULE / MEMBER" voice. */
+.label {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
 
 .h-page {
+  font-family: var(--font-display);
   font-size: var(--fs-3xl);
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.04;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .h-section {
-  font-size: var(--fs-xl);
-  font-weight: 620;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .h-card {
+  font-family: var(--font-display);
   font-size: var(--fs-md);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .lead {
   font-size: var(--fs-md);
   color: var(--text-2);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .muted {
@@ -166,13 +175,12 @@ ol {
 .meta {
   font-size: var(--fs-xs);
   color: var(--text-3);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 .num {
@@ -180,29 +188,15 @@ ol {
 }
 
 .link {
-  color: var(--link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 
-.link:hover {
-  text-decoration-color: currentColor;
-}
-
-/* ============ Motion ============
-   Two kinds only:
-   - .enter: list/grid items fade + rise 8px on mount, staggered by --i.
-     Re-keying a list (e.g. after a filter change) replays it.
-   - .reveal: section content fades + rises once when scrolled into view.
-   Both use opacity/transform only. */
-
-@keyframes enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
+/* ---------- motion ----------
+   Choreography (intro, reveals, lists, timeline) is driven by GSAP; see
+   src/motion. The only CSS motion left is small state feedback and the
+   View Transitions cross-fade between routes. */
 
 @keyframes fade {
   from {
@@ -210,30 +204,6 @@ ol {
   }
 }
 
-.enter {
-  animation: enter var(--t-slow) var(--ease) both;
-  animation-delay: calc(min(var(--i, 0), 12) * var(--stagger));
-}
-
-.reveal {
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 600ms var(--ease),
-    transform 600ms var(--ease);
-}
-
-.reveal.is-visible {
-  opacity: 1;
-  transform: none;
-}
-
-.page {
-  animation: fade var(--t-slow) var(--ease) both;
-}
-
-/* Route transitions (View Transitions API): quick cross-fade with a small
-   lift; shared photos/headers morph via their own view-transition-name. */
 .site-header {
   view-transition-name: site-header;
 }
@@ -247,7 +217,7 @@ ol {
 }
 
 ::view-transition-group(*) {
-  animation-duration: 380ms;
+  animation-duration: 420ms;
   animation-timing-function: var(--ease-inout);
 }
 
@@ -265,17 +235,12 @@ ol {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
   *,
   *::before,
   *::after {
     animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
   ::view-transition-group(*),
@@ -285,12 +250,6 @@ ol {
   }
 }
 
-.no-js .reveal {
-  opacity: 1;
-  transform: none;
-}
-
-/* Theme switch: cross-fade colors only during the swap. */
 .theme-swap *,
 .theme-swap *::before,
 .theme-swap *::after {

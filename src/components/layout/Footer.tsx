@@ -1,4 +1,8 @@
+import { useRef } from "react";
 import { Link } from "react-router";
+import { useResource } from "@/hooks/useResource";
+import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { api } from "@/services";
 import { Logo } from "./Logo";
 
 const cols = [
@@ -27,8 +31,30 @@ const cols = [
 ];
 
 export function Footer() {
+  const members = useResource(() => api.listMembers({ sort: "generation" }), []);
+  const stripe = useRef<HTMLDivElement>(null);
+  const colors = (members.data ?? []).filter((m) => m.status !== "graduated").map((m) => m.color);
+  // The member-colour stripe rises bar by bar when the footer comes into view.
+  useGSAP(
+    () => {
+      if (!stripe.current || !colors.length || reducedMotion()) return;
+      gsap.from(stripe.current.children, {
+        scaleY: 0,
+        duration: 0.6,
+        ease: "power3.out",
+        stagger: 0.03,
+        scrollTrigger: { trigger: stripe.current, start: "top 98%", once: true },
+      });
+    },
+    { scope: stripe, dependencies: [colors.length] },
+  );
   return (
     <footer className="footer">
+      <div className="footer__stripe" ref={stripe} aria-hidden>
+        {colors.map((c, k) => (
+          <span key={k} style={{ background: c }} />
+        ))}
+      </div>
       <div className="container footer__inner">
         <div className="footer__brand">
           <Logo />

@@ -43,7 +43,7 @@ export default function TheaterPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Theater" lead="Upcoming and past shows with lineups. Times in WIB (UTC+7)." aside={<PreviewTag>Sample schedule — not official</PreviewTag>} />
+      <PageHeader label="Schedule" title="Theater" lead="Upcoming and past shows with lineups. Times in WIB (UTC+7)." aside={<PreviewTag>Sample schedule — not official</PreviewTag>} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs

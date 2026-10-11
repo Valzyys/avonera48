@@ -32,7 +32,7 @@ export default function MembersPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Members" lead="Search by name or nickname, filter by generation and status." aside={<PreviewTag>Sample profiles</PreviewTag>} />
+      <PageHeader label="Directory" title="Members" lead="Search by name or nickname, filter by generation and status." aside={<PreviewTag>Sample profiles</PreviewTag>} />
       <div className="container page-body">
         <div className="member-filters">
           <Field label="Search members" hideLabel>
