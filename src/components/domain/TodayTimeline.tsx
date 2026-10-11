@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Avatar, oshi } from "@/components/media/Media";
 import { Icon } from "@/components/ui";
 import type { LiveItem, ShowSummary } from "@/services";
-import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { gsap, reducedMotion, useGSAP, enter } from "@/motion/gsap";
 import { cx, formatTime } from "@/utils/format";
 
 const HOUR = 3_600_000;
@@ -59,7 +59,7 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
       };
       if (reducedMotion()) {
         focusNow(false);
-        gsap.from(el.querySelectorAll("[data-start]"), { autoAlpha: 0, duration: 0.5, stagger: 0.03 });
+        enter(el.querySelectorAll("[data-start]"), { autoAlpha: 0, duration: 0.5, stagger: 0.03 });
         return;
       }
       const at = (t: number) => (pos(t) / Math.max(nowPos, 0.01)) * D;
@@ -67,14 +67,14 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
       tl.fromTo(el, { "--p": 0 }, { "--p": nowPos, duration: D, ease: "power2.inOut" }, 0);
       el.querySelectorAll<HTMLElement>("[data-start]").forEach((bar) => {
         const t = at(Number(bar.dataset.start));
-        if (bar.classList.contains("tl__bar-label")) tl.from(bar, { autoAlpha: 0, x: -6, duration: 0.4 }, t + 0.25);
-        else tl.from(bar, { scaleX: 0, transformOrigin: "left center", duration: 0.5, ease: "power2.out" }, t);
+        if (bar.classList.contains("tl__bar-label")) enter(bar, { autoAlpha: 0, x: -6, duration: 0.4 }, tl, t + 0.25);
+        else enter(bar, { scaleX: 0, transformOrigin: "left center", duration: 0.5, ease: "power2.out" }, tl, t);
       });
-      tl.from(el.querySelectorAll(".tl__label"), { autoAlpha: 0, x: -10, duration: 0.5, stagger: 0.05 }, 0);
+      enter(el.querySelectorAll(".tl__label"), { autoAlpha: 0, x: -10, duration: 0.5, stagger: 0.05 }, tl, 0);
       // start when the board is actually on screen
       gsap.timeline({ scrollTrigger: { trigger: el, start: "top 85%", once: true, onEnter: () => void tl.play() } });
     },
-    { scope: root, dependencies: [play] },
+    { scope: root, revertOnUpdate: true, dependencies: [play] },
   );
 
   return (
@@ -183,7 +183,7 @@ export function TodayTimeline({ dayStartMs, now, streams, shows, onOpen, play }:
         <span className="tl__key tl__key--oshi" /> Stream, coloured by team
         <span className="tl__key tl__key--live" /> Live now
         <span className="tl__key tl__key--show" /> Theater show
-        <span className="tl__legend-note">Sample snapshot · times in WIB</span>
+        <span className="tl__legend-note">Times in WIB</span>
       </p>
     </div>
   );

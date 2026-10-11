@@ -2,7 +2,8 @@ import { useState } from "react";
 import { LiveTile } from "@/components/domain/Cards";
 import { StreamDialog } from "@/components/domain/StreamDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { ButtonLink, EmptyState, ErrorState, Field, PreviewTag, Select, Skeleton, Tabs } from "@/components/ui";
+import { ButtonLink, EmptyState, ErrorState, Field, Select, Skeleton, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api, type LiveItem } from "@/services";
@@ -28,7 +29,7 @@ export default function LivePage() {
 
   return (
     <div className="page">
-      <PageHeader label="IDN Live · SHOWROOM" title="Live now" lead="Members streaming on IDN Live and SHOWROOM. Tap a stream for details." aside={<PreviewTag>Sample data — not real-time</PreviewTag>} />
+      <PageHeader label="IDN Live · SHOWROOM" title="Live now" lead="Members streaming on IDN Live and SHOWROOM. Tap a stream for details." aside={<SourceNote />} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs

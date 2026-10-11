@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "@/services";
 
-const loadedAt = Date.now();
-const base = new Date(api.now).getTime();
-
-/** The data source's "now", advancing in real time since page load. */
+/** The data source's "now": real time for live data, the replay instant (advancing) for the snapshot. */
 export function sourceNow() {
-  return base + (Date.now() - loadedAt);
+  return new Date(api.now).getTime();
 }
 
 /**

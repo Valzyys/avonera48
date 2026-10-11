@@ -1,5 +1,6 @@
 import { PlatformMark, StreamThumb } from "@/components/media/Media";
 import { LiveFor } from "./Cards";
+import { SourceNote } from "./SourceNote";
 import { Button, Dialog } from "@/components/ui";
 import { api, type LiveItem } from "@/services";
 import { formatDateTime, formatDuration, formatRelative } from "@/utils/format";
@@ -81,7 +82,7 @@ export function StreamDialog({ stream, onClose }: { stream: LiveItem | null; onC
               </dd>
             </div>
           </dl>
-          <p className="meta">From a sample jkt48connect.com response, replayed at 23:20 WIB on 10 Oct 2026.</p>
+          <SourceNote />
         </div>
       )}
     </Dialog>

@@ -1,12 +1,12 @@
-import { snapshotService } from "./snapshotService";
+import { dataService } from "./dataService";
 import type { DataService } from "./types";
 
 /**
- * The active data adapter: sample responses from the jkt48connect.com API,
- * replayed at a fixed instant. A live adapter implementing `DataService`
- * (calling the API through the Worker, key kept server-side) can be swapped
- * in here without touching pages or components.
+ * The active data adapter: the jkt48connect.com API through the Worker
+ * proxy (key kept server-side), falling back to a bundled snapshot when the
+ * API is not reachable.
  */
-export const api: DataService = snapshotService;
+export const api: DataService = dataService;
+export { dataSource } from "./dataService";
 
 export * from "./types";

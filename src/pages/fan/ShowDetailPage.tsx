@@ -4,7 +4,8 @@ import { Flag, MemberPhoto, ShowArt } from "@/components/media/Media";
 import { ShowStatusBadge } from "@/components/domain/Badges";
 import { vtShow } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
-import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, PreviewTag, Skeleton } from "@/components/ui";
+import { Badge, Breadcrumb, ButtonLink, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { useEntrance } from "@/motion/hooks";
@@ -74,7 +75,7 @@ export default function ShowDetailPage() {
                     <dd>{show.lineup.length ? `${show.lineup.length} members` : "Not announced"}</dd>
                   </div>
                 </dl>
-                <PreviewTag>From a sample jkt48connect.com theater response</PreviewTag>
+                <SourceNote />
                 <div className="actions-row">
                   <ShareButton />
                 </div>

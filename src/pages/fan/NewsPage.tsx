@@ -1,7 +1,8 @@
 import { useSearchParams } from "react-router";
 import { NewsRow } from "@/components/domain/Cards";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { EmptyState, ErrorState, PreviewTag, SkeletonRows, Tabs } from "@/components/ui";
+import { EmptyState, ErrorState, SkeletonRows, Tabs } from "@/components/ui";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/services";
@@ -16,7 +17,7 @@ export default function NewsPage() {
 
   return (
     <div className="page">
-      <PageHeader label="Information" title="News" lead="Official announcements, newest first. Each one links to the full text on jkt48.com." aside={<PreviewTag>Sample snapshot</PreviewTag>} />
+      <PageHeader label="Information" title="News" lead="Official announcements, newest first. Each one links to the full text on jkt48.com." aside={<SourceNote />} />
       <div className="container page-body">
         <div className="toolbar">
           <Tabs label="Category" value={cat} onChange={(c) => setParams(c === "all" ? {} : { category: c }, { replace: true })} items={CATS.map((c) => ({ id: c, label: c === "all" ? "All" : c }))} />

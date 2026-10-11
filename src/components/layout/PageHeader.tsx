@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { gsap, shift, useGSAP } from "@/motion/gsap";
+import { enter, gsap, useGSAP } from "@/motion/gsap";
 import { cx } from "@/utils/format";
 
 interface PageHeaderProps {
@@ -16,10 +16,9 @@ export function PageHeader({ title, label, lead, aside, children, className }: P
   const ref = useRef<HTMLElement>(null);
   useGSAP(
     () => {
-      gsap
-        .timeline()
-        .from(".page-header__title-inner", shift(1) ? { yPercent: 110, duration: 0.9, ease: "power4.out" } : { autoAlpha: 0, duration: 0.5 })
-        .from(".page-header [data-in]", { autoAlpha: 0, y: shift(12), duration: 0.6, stagger: 0.06, clearProps: "transform,opacity,visibility" }, "-=0.6");
+      const tl = gsap.timeline();
+      enter(".page-header__title-inner", { yPercent: 110, duration: 0.9, ease: "power4.out" }, tl);
+      enter(".page-header [data-in]", { autoAlpha: 0, y: 12, duration: 0.6, stagger: 0.06, clearProps: "transform,opacity,visibility" }, tl, "-=0.6");
     },
     { scope: ref },
   );

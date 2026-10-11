@@ -4,11 +4,12 @@ import { Avatar, Flag, MemberPhoto, PlatformMark, ShowArt, oshi } from "@/compon
 import { LineupAvatars, LiveFor, ShowRow, StreamCard, vtShow } from "@/components/domain/Cards";
 import { StreamDialog } from "@/components/domain/StreamDialog";
 import { TodayTimeline } from "@/components/domain/TodayTimeline";
-import { ButtonLink, ErrorState, Icon, PreviewTag, Skeleton } from "@/components/ui";
+import { ButtonLink, ErrorState, Icon, Skeleton } from "@/components/ui";
 import { formatCountdown, useClock } from "@/hooks/useClock";
+import { SourceNote } from "@/components/domain/SourceNote";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
-import { gsap, reducedMotion, useGSAP } from "@/motion/gsap";
+import { enter, gsap, reducedMotion, useGSAP } from "@/motion/gsap";
 import { useSectionReveal, useStagger } from "@/motion/hooks";
 import { api, type LiveItem, type ShowSummary } from "@/services";
 import { compact, formatDate, formatDuration, formatTime, formatWeekday } from "@/utils/format";
@@ -67,6 +68,7 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
   const members = useResource(() => api.listMembers({ sort: "generation" }), []);
   const live = useResource(() => api.listLiveNow(), []);
   const ready = !!members.data;
+  const [grid] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches);
 
   useGSAP(
     () => {
@@ -83,15 +85,23 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
       // then the paper drops away and the stripes lift off the page while
       // the hero builds itself underneath.
       const tl = gsap.timeline({ onComplete: finish });
-      tl.from(stripes, { yPercent: 101, duration: 0.6, ease: "power3.inOut", stagger: { each: 0.03, from: "start" } })
-        .from(plate, { clipPath: "inset(0 50% 0 50%)", duration: 0.45, ease: "power3.inOut" }, "-=0.2")
-        .from(word, { yPercent: 110, duration: 0.55, ease: "power4.out", stagger: 0.035 }, "-=0.15")
-        .from(meta, { autoAlpha: 0, y: 8, duration: 0.35 }, "-=0.25")
-        .to({}, { duration: 0.25 })
-        .to(plate, { clipPath: "inset(0 50% 0 50%)", duration: 0.35, ease: "power3.in" })
+      // Narrow screens get a 3×4 grid of portraits (strips would be too thin
+      // to show a face); wide screens get the row of strips.
+      if (grid) enter(stripes, { autoAlpha: 0, scale: 0.6, rotate: () => gsap.utils.random(-8, 8), duration: 0.55, ease: "back.out(1.6)", stagger: { each: 0.06, grid: [4, 3], from: "center" } }, tl);
+      else enter(stripes, { yPercent: 101, duration: 0.6, ease: "power3.inOut", stagger: { each: 0.03, from: "start" } }, tl);
+      enter(plate, { clipPath: "inset(0% 50% 0% 50%)", duration: 0.45, ease: "power3.inOut" }, tl, "-=0.2");
+      enter(word, { yPercent: 110, duration: 0.55, ease: "power4.out", stagger: 0.035 }, tl, "-=0.15");
+      enter(meta, { autoAlpha: 0, y: 8, duration: 0.35 }, tl, "-=0.25");
+      tl.to({}, { duration: 0.25 })
+        .to(plate, { clipPath: "inset(0% 50% 0% 50%)", duration: 0.35, ease: "power3.in" })
         .set(ref.current, { backgroundColor: "transparent" })
         .call(onReveal)
-        .to(stripes, { yPercent: -101, duration: 0.7, ease: "power3.inOut", stagger: { each: 0.03, from: "end" } });
+        .to(
+          stripes,
+          grid
+            ? { autoAlpha: 0, scale: 0.8, yPercent: -20, duration: 0.5, ease: "power3.in", stagger: { each: 0.05, grid: [4, 3], from: "edges" } }
+            : { yPercent: -101, duration: 0.7, ease: "power3.inOut", stagger: { each: 0.03, from: "end" } },
+        );
 
       const skip = () => void tl.timeScale(4);
       const el = ref.current;
@@ -104,16 +114,17 @@ function Intro({ onReveal, onDone }: { onReveal: () => void; onDone: () => void 
         window.removeEventListener("wheel", skip);
       };
     },
-    { scope: ref, dependencies: [ready] },
+    { scope: ref, revertOnUpdate: true, dependencies: [ready] },
   );
 
-  const cast = (members.data ?? []).filter((m) => m.status === "active" && m.photoUrl).slice(0, 14);
+  const cast = (members.data ?? []).filter((m) => m.status === "active" && m.photoUrl).slice(0, grid ? 12 : 14);
   return (
-    <div ref={ref} className="intro" aria-hidden>
+    <div ref={ref} className={`intro ${grid ? "intro--grid" : ""}`} aria-hidden>
       <div className="intro__stripes">
         {cast.map((m) => (
           <span key={m.slug} className="intro__stripe" style={{ background: m.color }}>
-            <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" />
+            <img src={m.photoUrl} alt="" decoding="async" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.display = "none")} />
+            {grid && <span className="intro__tile-name">{m.nickname}</span>}
           </span>
         ))}
       </div>
@@ -270,19 +281,14 @@ function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone
     () => {
       if (!ready || !introDone || !ref.current) return;
       const q = gsap.utils.selector(ref);
-      if (reducedMotion()) {
-        gsap.from(q(".today__top, .today__board, .today__below"), { autoAlpha: 0, duration: 0.6, stagger: 0.1 });
-        return;
-      }
-      gsap
-        .timeline()
-        .from(q(".today__line > span"), { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.08 })
-        .from(q(".today__intro [data-in]"), { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.06, clearProps: "all" }, "-=0.55")
-        .from(q(".hero-card"), { autoAlpha: 0, y: 40, rotate: (k: number) => (k - 1) * 3, duration: 0.8, stagger: 0.09, ease: "power3.out", clearProps: "opacity,visibility,transform" }, "-=0.6")
-        .from(q(".today__board"), { autoAlpha: 0, y: 24, duration: 0.7, clearProps: "all" }, "-=0.45")
-        .from(q(".today__below > *"), { autoAlpha: 0, y: 20, duration: 0.6, stagger: 0.08, clearProps: "all" }, "-=0.35");
+      const tl = gsap.timeline();
+      enter(q(".today__line > span"), { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.08 }, tl);
+      enter(q(".today__intro [data-in]"), { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.06, clearProps: "all" }, tl, "-=0.55");
+      enter(q(".hero-card"), { autoAlpha: 0, y: 40, rotate: (k: number) => (k - 1) * 3, duration: 0.8, stagger: 0.09, ease: "power3.out", clearProps: "opacity,visibility,transform" }, tl, "-=0.6");
+      enter(q(".today__board"), { autoAlpha: 0, y: 24, duration: 0.7, clearProps: "all" }, tl, "-=0.45");
+      enter(q(".today__below > *"), { autoAlpha: 0, y: 20, duration: 0.6, stagger: 0.08, clearProps: "all" }, tl, "-=0.35");
     },
-    { scope: ref, dependencies: [ready, introDone] },
+    { scope: ref, revertOnUpdate: true, dependencies: [ready, introDone] },
   );
 
   return (
@@ -330,7 +336,7 @@ function Today({ onOpen, introDone }: { onOpen: (i: LiveItem) => void; introDone
               </ButtonLink>
             </div>
             <p className="today__note" data-in>
-              <PreviewTag>Sample snapshot from the jkt48connect.com API, replayed at 23:20 WIB</PreviewTag>
+              <SourceNote />
             </p>
           </div>
 
@@ -419,7 +425,7 @@ function Ranking() {
   useGSAP(
     () => {
       if (!rankRef.current || !top.data || reducedMotion()) return;
-      gsap.from(rankRef.current.querySelectorAll(".rank__bar span"), {
+      enter(rankRef.current.querySelectorAll(".rank__bar span"), {
         scaleX: 0,
         transformOrigin: "left center",
         duration: 1.1,
@@ -428,7 +434,7 @@ function Ranking() {
         scrollTrigger: { trigger: rankRef.current, start: "top 85%", once: true },
       });
     },
-    { scope: rankRef, dependencies: [top.data] },
+    { scope: rankRef, revertOnUpdate: true, dependencies: [top.data] },
   );
 
   return (
