@@ -4,6 +4,9 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-15",
   "observability": { "enabled": true },
+  // Build the app before every deploy/upload, so CI (Workers Builds) does not
+  // depend on a build command being configured in the dashboard.
+  "build": { "command": "npm run build" },
   // The Vite build output is served as static assets. Unknown paths fall back
   // to index.html so client-side routes (e.g. /dashboard/keys) resolve.
   // Only /api/* reaches the Worker script first (health + jkt48connect proxy).
