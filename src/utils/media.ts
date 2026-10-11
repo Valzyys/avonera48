@@ -16,3 +16,21 @@ export function media(url: string | undefined | null): string | undefined {
 
 /** A member photo bundled with the site (see scripts/fetch-photos.mjs), if any. */
 export const localPhoto = (slug: string): string | undefined => LOCAL[slug];
+
+/** The original jkt48connect URL for a /media/* path (when the proxy is unavailable). */
+export function mediaOrigin(src: string): string | null {
+  const m = /\/media\/((?:api\/)?img\/.+)$/.exec(src);
+  return m ? `https://jkt48connect.com/${m[1]}` : null;
+}
+
+/**
+ * onError for <img>: first retry the original URL if the /media proxy
+ * failed, then run `giveUp` (hide the image, show a fallback…).
+ */
+export function retryOrigin(img: HTMLImageElement, giveUp?: () => void) {
+  const origin = !img.dataset.retried && mediaOrigin(img.src);
+  if (origin) {
+    img.dataset.retried = "1";
+    img.src = origin;
+  } else giveUp?.();
+}

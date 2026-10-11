@@ -5,6 +5,7 @@ import { StreamCard } from "@/components/domain/Cards";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { SourceNote } from "@/components/domain/SourceNote";
 import { Breadcrumb, ButtonLink, EmptyState, ErrorState, Icon, Skeleton } from "@/components/ui";
+import { retryOrigin } from "@/utils/media";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { enter, gsap, useGSAP } from "@/motion/gsap";
@@ -196,7 +197,7 @@ export default function RecentDetailPage() {
                 <ul className="gifts">
                   {gifts.map((g, k) => (
                     <li key={`${g.name}-${k}`} className="gift">
-                      <span className="gift__icon">{g.image ? <img src={g.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} /> : null}</span>
+                      <span className="gift__icon">{g.image ? <img src={g.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => (e.currentTarget.style.visibility = "hidden"))} /> : null}</span>
                       <span className="gift__name">{g.name.replace(/\(anime\)|\(free\)/g, "").trim()}</span>
                       <span className="gift__count num">×{nf.format(g.count)}</span>
                       <span className="gift__value meta">{g.gold ? `${compact.format(g.gold)} gold` : `${compact.format(g.points)} pts`}</span>
@@ -216,7 +217,7 @@ export default function RecentDetailPage() {
                   {senders.map((t, k) => (
                     <li key={`${t.name}-${k}`} className="sender">
                       <span className="sender__pos num">{String(k + 1).padStart(2, "0")}</span>
-                      <span className="sender__avatar">{t.avatar ? <img src={t.avatar} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.display = "none")} /> : null}
+                      <span className="sender__avatar">{t.avatar ? <img src={t.avatar} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => retryOrigin(e.currentTarget, () => (e.currentTarget.style.display = "none"))} /> : null}
                         <span className="sender__initial">{t.name[0]}</span></span>
                       <span className="sender__main">
                         <span className="sender__name">{t.name}</span>
