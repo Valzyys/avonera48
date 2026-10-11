@@ -61,6 +61,8 @@ export interface LiveStream {
   /** Archive link (e.g. YouTube), only when the source provides one. */
   replayUrl: string | null;
   thumbnailUrl?: string;
+  /** Further thumbnails to try, in order, if the first fails to load. */
+  thumbnailAlt?: string[];
   /** Gift total as the source formats it, e.g. "Rp 3.067.500". */
   giftTotal?: string;
   /** Full post-live stats, when /recent/detail has the session. */
