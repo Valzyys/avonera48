@@ -1,5 +1,5 @@
 /**
- * D1 schema for the shop, memberships and the room's comments. Created on
+ * D1 schema for the shop, memberships, linked accounts and the room's comments. Created on
  * first use (IF NOT EXISTS), so a fresh database needs no migration step.
  */
 
@@ -85,6 +85,21 @@ const SCHEMA = [
     created_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS comments_show ON comments (show, id)`,
+  `CREATE TABLE IF NOT EXISTS account_links (
+    user_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    ext_email TEXT NOT NULL DEFAULT '',
+    ext_name TEXT NOT NULL DEFAULT '',
+    ext_avatar TEXT,
+    plan_id TEXT,
+    plan_name TEXT,
+    plan_expires_at TEXT,
+    linked_at TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, provider),
+    UNIQUE (provider, external_id)
+  )`,
 ];
 
 /**

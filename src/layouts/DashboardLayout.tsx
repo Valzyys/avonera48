@@ -293,6 +293,7 @@ const TITLES: Record<string, string> = {
   admin: "Admin",
   watch: "Watch",
   pay: "Payment",
+  connect: "Linked accounts",
 };
 const pageTitle = (path: string) => {
   const seg = path.split("/")[2];

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Button, Icon } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
 import { ApiError, prepareAvatar, profile } from "@/features/members/api";
+import { LinkedAccountPanel } from "@/features/members/LinkedAccount";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { DashHead, useDash, UserAvatar } from "@/layouts/DashboardLayout";
 import { formatDate } from "@/utils/format";
@@ -103,7 +104,12 @@ export default function ProfilePage() {
           <span className="meta">{user.email}</span>
           <div className="prof-badges">
             <span className="chip chip--mute">Member since {formatDate(user.createdAt)}</span>
-            {catalog?.membership && <span className="chip chip--ok">{catalog.membership.plan_name}</span>}
+            {catalog?.membership && (
+              <span className="chip chip--ok">
+                {catalog.membership.plan_name}
+                {catalog.membership.source === "jkt48connect" ? " · via JKT48Connect" : ""}
+              </span>
+            )}
             {user.isAdmin && <span className="chip chip--warn">Admin</span>}
           </div>
         </div>
@@ -148,6 +154,8 @@ export default function ProfilePage() {
           </div>
         </form>
       </div>
+
+      <LinkedAccountPanel />
 
       <div className="dash-panel dash-panel--row">
         <div>

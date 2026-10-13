@@ -127,8 +127,33 @@ export async function ticketPrice(db: D1Database, slug: string) {
   return global != null ? Number(global) : null;
 }
 
-export async function membershipOf(db: D1Database, uid: string) {
-  return db.prepare("SELECT plan_id, plan_name, started_at, expires_at FROM memberships WHERE user_id = ?").bind(uid).first<{ plan_id: string; plan_name: string; started_at: string; expires_at: string }>();
+export interface MembershipRow {
+  plan_id: string;
+  plan_name: string;
+  started_at: string;
+  expires_at: string;
+  /** Bought here, or mirrored from a linked JKT48Connect account (worker/link.ts). */
+  source: "avonera" | "jkt48connect";
+}
+
+/** The membership bought on this site (what admins and renewals change). */
+export async function ownMembership(db: D1Database, uid: string) {
+  return db.prepare("SELECT plan_id, plan_name, started_at, expires_at FROM memberships WHERE user_id = ?").bind(uid).first<Omit<MembershipRow, "source">>();
+}
+
+/** The viewer's membership: their own or their linked account's, whichever runs longer. */
+export async function membershipOf(db: D1Database, uid: string): Promise<MembershipRow | null> {
+  const [own, linked] = await Promise.all([
+    ownMembership(db, uid),
+    db
+      .prepare("SELECT plan_id, plan_name, linked_at AS started_at, plan_expires_at AS expires_at FROM account_links WHERE user_id = ? AND plan_expires_at IS NOT NULL")
+      .bind(uid)
+      .first<Omit<MembershipRow, "source">>(),
+  ]);
+  const a: MembershipRow | null = own ? { ...own, source: "avonera" } : null;
+  const b: MembershipRow | null = linked ? { ...linked, source: "jkt48connect" } : null;
+  if (!a || !b) return a ?? b;
+  return Date.parse(b.expires_at) > Date.parse(a.expires_at) ? b : a;
 }
 
 /** How the viewer may watch a show: their ticket, their membership, or not at all. */
@@ -207,7 +232,7 @@ export async function grant(db: D1Database, o: Order) {
 /** Adds days to a membership, counting from its end if it is still active. */
 export async function extendMembership(db: D1Database, uid: string, planId: string, planName: string, days: number) {
   const now = new Date().toISOString();
-  const current = await membershipOf(db, uid);
+  const current = await ownMembership(db, uid);
   const active = current && Date.parse(current.expires_at) > Date.now();
   const from = active ? Date.parse(current.expires_at) : Date.now();
   const expires = new Date(from + days * 86400000).toISOString();

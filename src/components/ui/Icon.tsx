@@ -56,6 +56,7 @@ const paths = {
   shrink: "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5",
   pause: "M8 5.5v13M16 5.5v13",
   pip: "M3 5h18v14H3zM12.5 11.5h6v5h-6z",
+  link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
 } as const;
 
 export type IconName = keyof typeof paths;

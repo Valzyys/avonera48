@@ -38,6 +38,7 @@ export default function MembershipPage() {
           {m ? (
             <span className="mem-pass__meta">
               Valid until {formatDate(m.expires_at)} · {days} day{days === 1 ? "" : "s"} left
+              {m.source === "jkt48connect" ? " · synced from JKT48Connect" : ""}
             </span>
           ) : (
             <span className="mem-pass__meta">A membership opens every theater show in the room for as long as it lasts.</span>

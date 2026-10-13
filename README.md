@@ -72,6 +72,16 @@ Payments go through MYPG (QRIS), in `worker/payment.ts`. The server polls the ga
 
 Redeploy after adding bindings or secrets so the functions pick them up.
 
+## Linking a JKT48Connect account
+
+Members can link their JKT48Connect account (Profile → Linked accounts). While linked, its membership opens every show here too; a membership bought here is never changed, and the one that runs longer counts. The flow, the endpoints and the request signing are in `worker/link.ts`; the prompt for building the JKT48Connect (Lovable) side is in `docs/lovable-jkt48connect-link.md`.
+
+| Name | |
+| --- | --- |
+| `JKT48CONNECT_LINK_SECRET` | Shared HMAC secret (secret). The same value goes into JKT48Connect as `AVONERA_LINK_SECRET` |
+| `JKT48CONNECT_APP_URL` | JKT48Connect's address, e.g. `https://jkt48connect.com` (its `/connect/avonera` page) |
+| `JKT48CONNECT_SYNC_URL` | Optional. JKT48Connect's `avonera-sync` function, for "Sync now" and unlink notices |
+
 ## Scripts
 
 - `npm run dev` — Vite dev server (no Worker, so it uses the snapshot)
