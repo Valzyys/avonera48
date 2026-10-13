@@ -16,6 +16,8 @@
  *   /api/room/:show/comments… live chat (worker/comments.ts)
  *   /api/shop/…               tickets, memberships, payments (worker/shop.ts)
  *   /api/admin/…              admin control (worker/admin.ts)
+ *   /api/link/…               linking a JKT48Connect account (worker/link.ts)
+ *   /api/integrations/…       signed calls from JKT48Connect (worker/link.ts)
  *
  * KV namespace AUTH:
  *   user:<email>          account record (PBKDF2-SHA256 password hash)
@@ -30,13 +32,14 @@
 
 import { handleAdmin } from "./admin";
 import { handleComments } from "./comments";
+import { handleIntegration, handleLink, type LinkEnv } from "./link";
 import { ensureSchema } from "./db";
 import { body, enc, fail, hex, randomHex, reply, sameOrigin, sha256, str } from "./http";
 import { partnerCall, partnerReady, type PartnerEnv, type PartnerSession, type PartnerShow } from "./partner";
 import { openProxied, roomMedia } from "./roomMedia";
 import { accessTo, handleShop, isAdmin, type ShopEnv } from "./shop";
 
-export interface AuthEnv extends PartnerEnv, ShopEnv {
+export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv {
   AUTH?: KVNamespace;
 }
 
@@ -283,7 +286,7 @@ const forbidden = () => fail(403, "forbidden", "Cross-site requests are not allo
 /** Handles the members' API; returns null for other paths. */
 export async function handleAuth(request: Request, env: AuthEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
-  const ours = ["/api/auth/", "/api/room", "/api/shop/", "/api/admin/", "/api/avatar/"].some((p) => path.startsWith(p));
+  const ours = ["/api/auth/", "/api/room", "/api/shop/", "/api/admin/", "/api/avatar/", "/api/link/", "/api/integrations/jkt48connect/"].some((p) => path.startsWith(p));
   if (!ours) return null;
   const kv = env.AUTH;
   if (!kv) return fail(503, "not_configured", "Accounts are not set up on this server yet.");
@@ -292,6 +295,8 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   // Public reads.
   const av = /^\/api\/avatar\/([a-f0-9-]{36})$/.exec(path);
   if (av && method === "GET") return getAvatar(kv, av[1]);
+  // Server-to-server from JKT48Connect: signed, no cookie, no origin check.
+  if (path.startsWith("/api/integrations/jkt48connect/")) return handleIntegration(request, env, url);
   if (method === "GET" && path === "/api/room/media") {
     if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
     return roomMedia(request, env, kv, url);
@@ -328,6 +333,7 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   const comments = await handleComments(request, env, viewer, url, method === "DELETE" ? sameSite : jsonOk);
   if (comments) return comments;
 
+  if (path.startsWith("/api/link/")) return handleLink(request, env, viewer, url, jsonOk, sameSite);
   if (path.startsWith("/api/shop/")) return handleShop(request, env, viewer, url, jsonOk);
   if (path.startsWith("/api/admin/")) {
     if (!isAdmin(env, user.email)) return fail(403, "forbidden", "Admins only.");

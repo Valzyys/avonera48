@@ -34,6 +34,7 @@ const router = createBrowserRouter([
       { path: "watch/:slug", lazy: page(() => import("@/pages/dashboard/WatchRoomPage")) },
       { path: "pay/:id", lazy: page(() => import("@/pages/dashboard/PayPage")) },
       { path: "admin", lazy: page(() => import("@/pages/dashboard/AdminPage")) },
+      { path: "connect/jkt48connect", lazy: page(() => import("@/pages/dashboard/ConnectPage")) },
       { path: "*", lazy: page(() => import("@/pages/site/NotFoundPage")) },
     ],
   },

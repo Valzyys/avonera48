@@ -50,6 +50,8 @@ export interface Membership {
   plan_name: string;
   started_at: string;
   expires_at: string;
+  /** Bought here, or mirrored from a linked JKT48Connect account. */
+  source?: "avonera" | "jkt48connect";
 }
 
 export interface Catalog {
@@ -113,6 +115,39 @@ export function accessOf(c: Catalog | undefined, show: string): "ticket" | "memb
 }
 
 /* ---------- profile ---------- */
+
+/* ---------- linked JKT48Connect account ---------- */
+
+export interface LinkedAccount {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string | null;
+}
+
+export interface LinkedMembership {
+  plan_id: string;
+  plan_name: string;
+  expires_at: string;
+}
+
+export interface AccountLink {
+  provider: "jkt48connect";
+  account: LinkedAccount;
+  membership: LinkedMembership | null;
+  linked_at: string;
+  synced_at: string;
+}
+
+export const link = {
+  get: () => call<{ available: boolean; syncable: boolean; link: AccountLink | null }>("/api/link/jkt48connect"),
+  start: () => call<{ url: string }>("/api/link/jkt48connect/start", { method: "POST", json: {} }).then((d) => d.url),
+  pending: (code: string) => call<{ account: LinkedAccount; membership: LinkedMembership | null; taken: boolean }>(`/api/link/jkt48connect/pending?code=${encodeURIComponent(code)}`),
+  confirm: (code: string) => call<{ link: AccountLink }>("/api/link/jkt48connect/confirm", { method: "POST", json: { code } }).then((d) => d.link),
+  cancel: (code: string) => call<{ ok: true }>("/api/link/jkt48connect/cancel", { method: "POST", json: { code } }),
+  sync: () => call<{ link: AccountLink | null }>("/api/link/jkt48connect/sync", { method: "POST", json: {} }).then((d) => d.link),
+  unlink: () => call<{ link: null }>("/api/link/jkt48connect", { method: "DELETE" }),
+};
 
 export const profile = {
   rename: (name: string) => call<{ user: Account }>("/api/auth/profile", { method: "POST", json: { name } }).then((d) => d.user),
