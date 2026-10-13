@@ -2095,3 +2095,122 @@
   position: absolute;
   inset: 0;
 }
+
+/* ======================= PHONES: two-up cards, compact schedule rows ======================= */
+/* Last in the file so it wins over the soft-shape overrides above. */
+
+@media (max-width: 640px) {
+  .live-grid,
+  .stream-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-6) var(--s-3);
+  }
+  .live-tile,
+  .stream-card {
+    gap: var(--s-2);
+    min-width: 0;
+  }
+  .live-tile__title,
+  .stream-card__title {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: var(--fs-sm);
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .live-tile__meta,
+  .stream-card__meta {
+    gap: 2px 5px;
+    font-size: 11px;
+  }
+  .stream-card__member {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-flag {
+    left: 8px;
+    bottom: 8px;
+  }
+  .live-tile__time,
+  .stream-card__duration {
+    right: 8px;
+    bottom: 8px;
+    padding: 2px 7px;
+    font-size: 10px;
+  }
+  .stream-card__peak {
+    top: 8px;
+    left: 8px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Banner on the left; time and status on top, title and lineup count below. */
+  .show-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "art time status"
+      "art main main";
+    align-items: center;
+    gap: 4px var(--s-3);
+    padding-block: var(--s-3);
+  }
+  .show-row__art {
+    display: flex;
+    grid-area: art;
+    justify-self: start;
+    height: 64px;
+    max-width: 120px;
+  }
+  .show-row__time {
+    grid-area: time;
+    align-self: end;
+  }
+  .show-row__clock {
+    font-size: var(--fs-md);
+  }
+  .show-row__main {
+    grid-area: main;
+    align-self: start;
+  }
+  .show-row__title {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: var(--fs-sm);
+    line-height: 1.3;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .show-row__main .meta {
+    font-size: 11px;
+  }
+  .show-row__lineup {
+    display: none;
+  }
+  .show-row__status {
+    grid-area: status;
+    align-self: end;
+    justify-self: end;
+    gap: 0;
+  }
+  .show-row__status > svg {
+    display: none;
+  }
+  .show-row__status .badge {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+  .day-group + .day-group {
+    margin-top: var(--s-8);
+  }
+  .day-group__title {
+    flex-wrap: wrap;
+    gap: 2px var(--s-2);
+    font-size: var(--fs-md);
+  }
+}
