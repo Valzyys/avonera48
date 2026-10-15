@@ -10,6 +10,8 @@
  *   POST /api/shop/orders/:id/cancel   cancel a pending payment
  *
  * Access to a show = a ticket for it, or an active membership.
+ * The catalog also carries the WhatsApp channel link, and the members' group
+ * link for accounts with an active membership (set in admin → Community).
  */
 
 import { ensureSchema, getSetting } from "./db";
@@ -311,23 +313,29 @@ export const publicOrder = (o: Order) => ({
 /* ---------- handlers ---------- */
 
 async function catalog(env: ShopEnv, db: D1Database, viewer: Viewer) {
-  const [global, products, plans, membership, tickets, pending] = await Promise.all([
+  const [global, products, plans, membership, tickets, pending, channel, group] = await Promise.all([
     getSetting(db, "ticket_price"),
     db.prepare("SELECT show_slug, price, on_sale FROM products").all<{ show_slug: string; price: number | null; on_sale: number }>(),
     db.prepare("SELECT * FROM plans WHERE active = 1 ORDER BY sort, price").all<Plan>(),
     membershipOf(db, viewer.id),
     db.prepare("SELECT show_slug, created_at FROM tickets WHERE user_id = ?").bind(viewer.id).all<{ show_slug: string; created_at: string }>(),
     db.prepare("SELECT id, kind, item_id FROM orders WHERE user_id = ? AND status = 'PENDING' ORDER BY created_at DESC LIMIT 20").bind(viewer.id).all<{ id: string; kind: string; item_id: string }>(),
+    getSetting(db, "wa_channel_url"),
+    getSetting(db, "wa_group_url"),
   ]);
+  const member = !!membership && Date.parse(membership.expires_at) > Date.now();
+  // The members' group link only reaches accounts with an active membership (and admins).
+  const inGroup = member || isAdmin(env, viewer.email);
   return reply({
     ok: true,
     payments: paymentReady(env),
     ticket_price: global != null ? Number(global) : null,
     products: Object.fromEntries(products.results.map((p) => [p.show_slug, { price: p.price, on_sale: !!p.on_sale }])),
     plans: plans.results.map((p) => ({ id: p.id, name: p.name, description: p.description, price: p.price, duration_days: p.duration_days, remaining: p.stock == null ? null : Math.max(0, p.stock - p.sold) })),
-    membership: membership && Date.parse(membership.expires_at) > Date.now() ? membership : null,
+    membership: member ? membership : null,
     tickets: tickets.results,
     pending: pending.results,
+    community: { channel: channel || null, group: group && inGroup ? group : null, group_locked: !!group && !inGroup },
   });
 }
 

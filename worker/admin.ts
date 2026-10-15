@@ -13,12 +13,23 @@
  *   PATCH /api/admin/members/:uid    { add_days } or { until: "YYYY-MM-DD" }   DELETE /api/admin/members/:uid (revoke)
  *   GET  /api/admin/users?email=     one account: membership and tickets
  *   DELETE /api/admin/tickets/:uid/:show   revoke a ticket
+ *   GET  /api/admin/community        POST /api/admin/community        { channel, group } WhatsApp links
  */
 
 import { ensureSchema, getSetting, setSetting } from "./db";
 import { body, fail, int, randomId, reply, str } from "./http";
 import { checkPayment } from "./payment";
 import { extendMembership, grant, publicOrder, refresh, sweep, theaterShows, type Order, type Plan, type ShopEnv } from "./shop";
+
+/** An https link on WhatsApp's own hosts (channel, group invite or wa.me). */
+function waLink(u: string) {
+  try {
+    const url = new URL(u);
+    return url.protocol === "https:" && /^(?:(?:www|chat)\.)?whatsapp\.com$|^wa\.me$/.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 const adminOrder = (o: Order) => ({ ...publicOrder(o), user_email: o.user_email, user_name: o.user_name, user_id: o.user_id });
 
@@ -181,6 +192,28 @@ export async function handleAdmin(request: Request, env: ShopEnv, kv: KVNamespac
   if (m && method === "DELETE" && !m[2]) {
     const r = await db.prepare("DELETE FROM plans WHERE id = ? AND sold = 0").bind(m[1]).run();
     return r.meta.changes ? reply({ ok: true }) : fail(409, "in_use", "This plan has been sold; switch it off instead.");
+  }
+
+  if (method === "GET" && path === "/community") {
+    const [channel, group] = await Promise.all([getSetting(db, "wa_channel_url"), getSetting(db, "wa_group_url")]);
+    return reply({ ok: true, channel, group });
+  }
+  if (method === "POST" && path === "/community") {
+    const d = await body(request);
+    const links: [string, string, unknown][] = [
+      ["wa_channel_url", "channel", d.channel],
+      ["wa_group_url", "group", d.group],
+    ];
+    for (const [, field, v] of links) {
+      const u = str(v, 300).trim();
+      if (u && !waLink(u)) return fail(400, "invalid", "Use a WhatsApp link (https://whatsapp.com/channel/… or https://chat.whatsapp.com/…).", field);
+    }
+    for (const [key, , v] of links) {
+      const u = str(v, 300).trim();
+      if (u) await setSetting(db, key, u);
+      else await db.prepare("DELETE FROM settings WHERE key = ?").bind(key).run();
+    }
+    return reply({ ok: true });
   }
 
   if (method === "GET" && path === "/pricing") {
