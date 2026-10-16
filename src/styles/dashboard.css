@@ -3346,3 +3346,101 @@ a.ov-show__title:hover {
     justify-content: flex-start;
   }
 }
+
+/* ---------- community (WhatsApp) ---------- */
+.ov-community {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--s-4);
+}
+.ov-comm {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 16px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--dash-r);
+  background:
+    radial-gradient(90% 140% at 100% 0%, color-mix(in oklab, #25d366 12%, transparent), transparent 65%),
+    var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+.ov-comm:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, #25d366 45%, var(--line-2));
+  box-shadow: 0 14px 30px -18px color-mix(in oklab, #128c7e 60%, transparent);
+}
+.ov-comm.is-members {
+  background:
+    radial-gradient(90% 140% at 100% 0%, color-mix(in oklab, #e8346b 12%, transparent), transparent 65%),
+    var(--surface);
+}
+.ov-comm.is-members:hover {
+  border-color: color-mix(in oklab, #e8346b 45%, var(--line-2));
+  box-shadow: 0 14px 30px -18px color-mix(in oklab, #e8346b 60%, transparent);
+}
+.ov-comm.is-locked {
+  background: var(--surface);
+  border-style: dashed;
+}
+.ov-comm__icon {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #25d366;
+  color: #fff;
+}
+.ov-comm.is-members .ov-comm__icon {
+  background: linear-gradient(140deg, #e8346b, #8e1d4a);
+}
+.ov-comm.is-locked .ov-comm__icon {
+  background: var(--line-2);
+  color: var(--text-2);
+}
+.ov-comm__body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.ov-comm__kicker {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.ov-comm__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 800;
+}
+.ov-comm__cta {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  margin-top: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.ov-comm.is-locked .ov-comm__cta {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}

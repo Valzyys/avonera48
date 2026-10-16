@@ -37,7 +37,7 @@ export default function OverviewPage() {
 
   useGSAP(
     () => {
-      enter(".dash-head > *, .ov-hero, .ov-stat, .ov-panel", { autoAlpha: 0, y: 16, duration: 0.7, stagger: 0.06, clearProps: "transform,opacity,visibility" });
+      enter(".dash-head > *, .ov-hero, .ov-stat, .ov-comm, .ov-panel", { autoAlpha: 0, y: 16, duration: 0.7, stagger: 0.06, clearProps: "transform,opacity,visibility" });
     },
     { scope: ref },
   );
@@ -107,6 +107,57 @@ export default function OverviewPage() {
           <span className="ov-stat__note">{paid.length} paid order{paid.length === 1 ? "" : "s"}</span>
         </Link>
       </div>
+
+      {catalog?.community && (catalog.community.channel || catalog.community.group || catalog.community.group_locked) && (
+        <section className="ov-community" aria-label="Community">
+          {catalog.community.channel && (
+            <a className="ov-comm" href={catalog.community.channel} target="_blank" rel="noopener noreferrer">
+              <span className="ov-comm__icon" aria-hidden>
+                <Icon name="whatsapp" size={22} />
+              </span>
+              <span className="ov-comm__body">
+                <span className="ov-comm__kicker">WhatsApp channel</span>
+                <span className="ov-comm__title">Follow Avonera48</span>
+                <span className="meta">Show announcements, ticket drops and site news, straight to WhatsApp.</span>
+              </span>
+              <span className="ov-comm__cta">
+                Follow <Icon name="arrowUpRight" size={14} />
+              </span>
+            </a>
+          )}
+          {catalog.community.group ? (
+            <a className="ov-comm is-members" href={catalog.community.group} target="_blank" rel="noopener noreferrer">
+              <span className="ov-comm__icon" aria-hidden>
+                <Icon name="users" size={22} />
+              </span>
+              <span className="ov-comm__body">
+                <span className="ov-comm__kicker">Members’ group · WhatsApp</span>
+                <span className="ov-comm__title">Join the members’ group</span>
+                <span className="meta">Watch-along chat, reminders before each show and help from the team. For members only, please don’t share the link.</span>
+              </span>
+              <span className="ov-comm__cta">
+                Join <Icon name="arrowUpRight" size={14} />
+              </span>
+            </a>
+          ) : (
+            catalog.community.group_locked && (
+              <Link className="ov-comm is-locked" to="/dashboard/membership">
+                <span className="ov-comm__icon" aria-hidden>
+                  <Icon name="lock" size={20} />
+                </span>
+                <span className="ov-comm__body">
+                  <span className="ov-comm__kicker">Members’ group · WhatsApp</span>
+                  <span className="ov-comm__title">Unlocks with a membership</span>
+                  <span className="meta">Members get the invite to our WhatsApp group: watch-along chat and show reminders.</span>
+                </span>
+                <span className="ov-comm__cta">
+                  See plans <Icon name="arrowRight" size={14} />
+                </span>
+              </Link>
+            )
+          )}
+        </section>
+      )}
 
       <div className="ov-grid">
         <section className="ov-panel">

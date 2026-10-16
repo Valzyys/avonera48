@@ -62,6 +62,8 @@ export interface Catalog {
   membership: Membership | null;
   tickets: { show_slug: string; created_at: string }[];
   pending: { id: string; kind: string; item_id: string }[];
+  /** WhatsApp links. `group` only comes with an active membership; `group_locked` says one exists. */
+  community?: { channel: string | null; group: string | null; group_locked: boolean };
 }
 
 export type OrderStatus = "PENDING" | "SUCCESS" | "EXPIRED" | "CANCELLED" | "FAILED";
@@ -256,6 +258,8 @@ export const admin = {
     call<{ expires_at: string }>(`/api/admin/members/${encodeURIComponent(uid)}`, { method: "PATCH", json: change }),
   revoke: (uid: string) => call<{ ok: true }>(`/api/admin/members/${encodeURIComponent(uid)}`, { method: "DELETE" }),
   user: (email: string) => call<AdminUser>(`/api/admin/users?email=${encodeURIComponent(email)}`),
+  community: () => call<{ channel: string | null; group: string | null }>("/api/admin/community"),
+  saveCommunity: (links: { channel: string; group: string }) => call<{ ok: true }>("/api/admin/community", { method: "POST", json: links }),
   revokeTicket: (uid: string, show: string) => call<{ ok: true }>(`/api/admin/tickets/${encodeURIComponent(uid)}/${encodeURIComponent(show)}`, { method: "DELETE" }),
 };
 

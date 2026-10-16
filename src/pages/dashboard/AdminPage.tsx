@@ -8,7 +8,7 @@ import { DashHead, useDash } from "@/layouts/DashboardLayout";
 import { cx, formatDate, formatDateTime } from "@/utils/format";
 import { StatusChip } from "./parts";
 
-type Tab = "overview" | "orders" | "plans" | "pricing" | "vouchers" | "members";
+type Tab = "overview" | "orders" | "plans" | "pricing" | "vouchers" | "members" | "community";
 
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
@@ -17,6 +17,7 @@ const TABS: [Tab, string][] = [
   ["pricing", "Products"],
   ["vouchers", "Vouchers"],
   ["members", "Members"],
+  ["community", "Community"],
 ];
 
 export default function AdminPage() {
@@ -40,6 +41,7 @@ export default function AdminPage() {
       {tab === "pricing" && <Pricing />}
       {tab === "vouchers" && <Vouchers />}
       {tab === "members" && <Members />}
+      {tab === "community" && <Community />}
     </div>
   );
 }
@@ -53,6 +55,54 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <small className="meta">{hint}</small>}
     </label>
+  );
+}
+
+/* ---------- community (WhatsApp links) ---------- */
+
+function Community() {
+  const res = useResource(() => admin.community(), []);
+  const [links, setLinks] = useState({ channel: "", group: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (res.data) setLinks({ channel: res.data.channel ?? "", group: res.data.group ?? "" });
+  }, [res.data]);
+
+  if (res.status === "error") return <ErrorState error={res.error} onRetry={res.reload} />;
+  if (!res.data) return <SkeletonRows rows={2} />;
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await admin.saveCommunity({ channel: links.channel.trim(), group: links.group.trim() });
+      setMsg({ ok: true, text: "Saved. Members see it on their dashboard." });
+    } catch (err) {
+      setMsg({ ok: false, text: errText(err) });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <form className="dash-panel" onSubmit={save}>
+      <h2 className="dash-panel__title">WhatsApp</h2>
+      <p className="meta">Shown on every dashboard. The group link is only sent to accounts with an active membership; others see it locked. Leave a field empty to hide it.</p>
+      <Field label="Channel link" hint="Everyone signed in sees this, e.g. https://whatsapp.com/channel/…">
+        <input className="dash-input" type="url" inputMode="url" placeholder="https://whatsapp.com/channel/…" value={links.channel} onChange={(e) => setLinks({ ...links, channel: e.target.value })} />
+      </Field>
+      <Field label="Members’ group link" hint="Active members only, e.g. https://chat.whatsapp.com/…">
+        <input className="dash-input" type="url" inputMode="url" placeholder="https://chat.whatsapp.com/…" value={links.group} onChange={(e) => setLinks({ ...links, group: e.target.value })} />
+      </Field>
+      <div className="dash-panel__foot">
+        {msg && <span className={`form-msg ${msg.ok ? "is-ok" : "is-bad"}`}>{msg.text}</span>}
+        <Button type="submit" variant="primary" loading={busy}>
+          Save
+        </Button>
+      </div>
+    </form>
   );
 }
 
