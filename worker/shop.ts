@@ -33,6 +33,9 @@ export interface Viewer {
   id: string;
   name: string;
   email: string;
+  /** Owner (ADMIN_EMAILS) or an account promoted by an admin. */
+  admin?: boolean;
+  verified?: boolean;
 }
 
 export const isAdmin = (env: ShopEnv, email: string) =>
@@ -326,7 +329,7 @@ async function catalog(env: ShopEnv, db: D1Database, viewer: Viewer) {
   ]);
   const member = !!membership && Date.parse(membership.expires_at) > Date.now();
   // The members' group link only reaches accounts with an active membership (and admins).
-  const inGroup = member || isAdmin(env, viewer.email);
+  const inGroup = member || !!viewer.admin;
   return reply({
     ok: true,
     payments: paymentReady(env),

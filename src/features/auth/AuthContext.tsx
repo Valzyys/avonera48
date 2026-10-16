@@ -8,6 +8,8 @@ export interface Account {
   /** Profile photo URL, if one was uploaded. */
   avatar: string | null;
   isAdmin: boolean;
+  /** Blue check next to the name. */
+  verified?: boolean;
 }
 
 /** An error from the auth API, with the form field it is about (if any). */

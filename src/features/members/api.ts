@@ -181,6 +181,7 @@ export interface ChatMessage {
   body: string;
   at: number;
   mine: boolean;
+  verified?: boolean;
 }
 
 export const chat = {
@@ -233,6 +234,18 @@ export interface AdminPricing {
   shows: { slug: string; title: string; startsAt: string }[];
 }
 
+export interface AdminAccount {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  avatar: string | null;
+  admin: boolean;
+  /** Listed in ADMIN_EMAILS: always an admin, can't be changed here. */
+  owner: boolean;
+  verified: boolean;
+}
+
 export const admin = {
   summary: () => call<AdminSummary>("/api/admin/summary"),
   orders: (params: { status?: string; q?: string; before?: string }) => {
@@ -260,6 +273,12 @@ export const admin = {
   user: (email: string) => call<AdminUser>(`/api/admin/users?email=${encodeURIComponent(email)}`),
   community: () => call<{ channel: string | null; group: string | null }>("/api/admin/community"),
   saveCommunity: (links: { channel: string; group: string }) => call<{ ok: true }>("/api/admin/community", { method: "POST", json: links }),
+  accounts: () => call<{ accounts: AdminAccount[] }>("/api/admin/accounts").then((d) => d.accounts),
+  account: (email: string) => call<{ account: AdminAccount }>(`/api/admin/accounts/${encodeURIComponent(email)}`).then((d) => d.account),
+  createAccount: (a: { name: string; email: string; password: string; admin: boolean; verified: boolean }) =>
+    call<{ account: AdminAccount }>("/api/admin/accounts", { method: "POST", json: a }).then((d) => d.account),
+  setAccount: (email: string, change: { admin?: boolean; verified?: boolean }) =>
+    call<{ account: AdminAccount }>(`/api/admin/accounts/${encodeURIComponent(email)}`, { method: "PATCH", json: change }).then((d) => d.account),
   revokeTicket: (uid: string, show: string) => call<{ ok: true }>(`/api/admin/tickets/${encodeURIComponent(uid)}/${encodeURIComponent(show)}`, { method: "DELETE" }),
 };
 

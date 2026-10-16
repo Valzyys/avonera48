@@ -16,6 +16,9 @@
  *   /api/room/:show/comments… live chat (worker/comments.ts)
  *   /api/shop/…               tickets, memberships, payments (worker/shop.ts)
  *   /api/admin/…              admin control (worker/admin.ts)
+ *   GET  /api/admin/accounts                 admins and verified accounts
+ *   POST /api/admin/accounts                 { name, email, password, admin, verified } create an account
+ *   PATCH /api/admin/accounts/:email         { admin?, verified? }
  *   /api/link/…               linking a JKT48Connect account (worker/link.ts)
  *   /api/integrations/…       signed calls from JKT48Connect (worker/link.ts)
  *
@@ -53,6 +56,10 @@ interface UserRecord {
   createdAt: string;
   /** Version of the uploaded profile photo, if any. */
   avatar?: number;
+  /** Made an admin by another admin (ADMIN_EMAILS are owners and always admins). */
+  role?: "admin";
+  /** Blue check next to the name. */
+  verified?: boolean;
 }
 
 interface Session {
@@ -83,7 +90,18 @@ function same(a: string, b: string) {
 
 const avatarUrl = (u: UserRecord) => (u.avatar ? `/api/avatar/${u.id}?v=${u.avatar}` : null);
 
-const publicUser = (u: UserRecord, env: AuthEnv) => ({ id: u.id, name: u.name, email: u.email, createdAt: u.createdAt, avatar: avatarUrl(u), isAdmin: isAdmin(env, u.email) });
+/** Owners (ADMIN_EMAILS) and accounts another admin promoted. */
+const adminOf = (env: AuthEnv, u: UserRecord) => isAdmin(env, u.email) || u.role === "admin";
+
+const publicUser = (u: UserRecord, env: AuthEnv) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  createdAt: u.createdAt,
+  avatar: avatarUrl(u),
+  isAdmin: adminOf(env, u),
+  verified: !!u.verified,
+});
 
 function readCookie(request: Request, name: string) {
   const raw = request.headers.get("cookie") ?? "";
@@ -173,6 +191,7 @@ async function profile(request: Request, env: AuthEnv, kv: KVNamespace, u: UserR
   if (name.length < 2 || name.length > 40) return fail(400, "invalid", "Use 2 to 40 characters for your name.", "name");
   u.name = name;
   await saveUser(kv, u);
+  if (u.role || u.verified) await indexFlags(env, u);
   return reply({ ok: true, user: publicUser(u, env) });
 }
 
@@ -256,7 +275,7 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
   let stream = show;
   if (env.DB) {
     await ensureSchema(env.DB);
-    if (!isAdmin(env, user.email) && !(await accessTo(env.DB, user.id, show))) return fail(402, "no_access", "Get a ticket or a membership to watch this show.");
+    if (!adminOf(env, user) && !(await accessTo(env.DB, user.id, show))) return fail(402, "no_access", "Get a ticket or a membership to watch this show.");
     const mapped = await env.DB.prepare("SELECT stream_slug FROM products WHERE show_slug = ?").bind(show).first<{ stream_slug: string | null }>();
     const open = (await roomShows(env))?.find((s) => s.entitled)?.show_slug;
     stream = mapped?.stream_slug || open || show;
@@ -274,6 +293,104 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
   const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
   if (!opened) return fail(502, "playback_refused", "The room couldn’t open. Try again in a moment.");
   return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
+}
+
+/* ---------- admins and verified accounts ---------- */
+
+interface FlagRow {
+  user_id: string;
+  email: string;
+  name: string;
+  admin: number;
+  verified: number;
+}
+
+const accountOut = (env: AuthEnv, u: UserRecord) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  createdAt: u.createdAt,
+  avatar: avatarUrl(u),
+  admin: adminOf(env, u),
+  owner: isAdmin(env, u.email),
+  verified: !!u.verified,
+});
+
+/** Keeps the D1 index (for listing) in step with the account record. */
+async function indexFlags(env: AuthEnv, u: UserRecord) {
+  if (!env.DB) return;
+  await ensureSchema(env.DB);
+  if (u.role !== "admin" && !u.verified) {
+    await env.DB.prepare("DELETE FROM account_flags WHERE user_id = ?").bind(u.id).run();
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO account_flags (user_id, email, name, admin, verified, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, name = excluded.name, admin = excluded.admin, verified = excluded.verified, updated_at = excluded.updated_at`,
+    )
+      .bind(u.id, u.email, u.name, u.role === "admin" ? 1 : 0, u.verified ? 1 : 0, new Date().toISOString())
+      .run();
+  }
+  // Their chat messages carry the check too.
+  await env.DB.prepare("UPDATE comments SET verified = ? WHERE user_id = ?").bind(u.verified ? 1 : 0, u.id).run();
+}
+
+async function adminAccounts(request: Request, env: AuthEnv, kv: KVNamespace, me: UserRecord, url: URL) {
+  const method = request.method;
+  const path = url.pathname.replace(/^\/api\/admin\/accounts\/?/, "");
+
+  if (method === "GET" && !path) {
+    const owners = (env.ADMIN_EMAILS ?? "")
+      .split(/[,\s]+/)
+      .map((e) => normEmail(e))
+      .filter(Boolean);
+    const rows = env.DB ? (await ensureSchema(env.DB), (await env.DB.prepare("SELECT * FROM account_flags ORDER BY admin DESC, name").all<FlagRow>()).results) : [];
+    const emails = [...new Set([...owners, ...rows.map((r) => r.email)])];
+    const users = (await Promise.all(emails.map((e) => kv.get<UserRecord>(`user:${e}`, "json")))).filter((u): u is UserRecord => !!u);
+    return reply({ ok: true, accounts: users.map((u) => accountOut(env, u)) });
+  }
+
+  if (method === "POST" && !path) {
+    const data = await body(request);
+    const name = str(data.name, 80).trim().replace(/\s+/g, " ");
+    const email = normEmail(str(data.email, 254));
+    const password = str(data.password, 200);
+    if (name.length < 2 || name.length > 40) return fail(400, "invalid", "Use 2 to 40 characters for the name.", "name");
+    if (!EMAIL.test(email)) return fail(400, "invalid", "Enter a valid email address.", "email");
+    if (password.length < 8 || password.length > 128) return fail(400, "invalid", "Use 8 to 128 characters for the password.", "password");
+    if (await kv.get(`user:${email}`)) return fail(409, "exists", "An account with this email already exists. Find it below to change it.", "email");
+    const salt = randomHex(16);
+    const user: UserRecord = { id: crypto.randomUUID(), name, email, salt, hash: await derive(password, salt, ITERATIONS), iterations: ITERATIONS, createdAt: new Date().toISOString() };
+    if (data.admin === true) user.role = "admin";
+    if (data.verified === true) user.verified = true;
+    await saveUser(kv, user);
+    await indexFlags(env, user);
+    return reply({ ok: true, account: accountOut(env, user) }, 201);
+  }
+
+  const email = normEmail(decodeURIComponent(path));
+  if (method === "GET" && path) {
+    const u = EMAIL.test(email) ? await kv.get<UserRecord>(`user:${email}`, "json") : null;
+    return u ? reply({ ok: true, account: accountOut(env, u) }) : fail(404, "not_found", "No account uses that email.");
+  }
+  if (method === "PATCH" && path) {
+    const u = EMAIL.test(email) ? await kv.get<UserRecord>(`user:${email}`, "json") : null;
+    if (!u) return fail(404, "not_found", "No account uses that email.");
+    const data = await body(request);
+    if (typeof data.admin === "boolean") {
+      if (!data.admin && isAdmin(env, u.email)) return fail(409, "owner", "This account is an owner (ADMIN_EMAILS); remove it there instead.");
+      if (!data.admin && u.id === me.id) return fail(409, "self", "You can’t remove your own admin access.");
+      if (data.admin) u.role = "admin";
+      else delete u.role;
+    }
+    if (typeof data.verified === "boolean") {
+      if (data.verified) u.verified = true;
+      else delete u.verified;
+    }
+    await saveUser(kv, u);
+    await indexFlags(env, u);
+    return reply({ ok: true, account: accountOut(env, u) });
+  }
+  return fail(404, "not_found", "Not found.");
 }
 
 /* ---------- router ---------- */
@@ -315,7 +432,7 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   const origin = request.headers.get("origin");
   const sameSite = !origin || origin === url.origin;
   const jsonOk = method === "GET" || sameOrigin(request, url);
-  const viewer = { id: user.id, name: user.name, email: user.email, avatar: avatarUrl(user) };
+  const viewer = { id: user.id, name: user.name, email: user.email, avatar: avatarUrl(user), admin: adminOf(env, user), verified: !!user.verified };
 
   if (path === "/api/auth/avatar") {
     if (!sameSite) return forbidden();
@@ -333,7 +450,10 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   if (path.startsWith("/api/link/")) return handleLink(request, env, viewer, url, jsonOk, sameSite);
   if (path.startsWith("/api/shop/")) return handleShop(request, env, viewer, url, jsonOk);
   if (path.startsWith("/api/admin/")) {
-    if (!isAdmin(env, user.email)) return fail(403, "forbidden", "Admins only.");
+    if (!viewer.admin) return fail(403, "forbidden", "Admins only.");
+    if (path === "/api/admin/accounts" || path.startsWith("/api/admin/accounts/")) {
+      return jsonOk ? adminAccounts(request, env, kv, user, url) : forbidden();
+    }
     return handleAdmin(request, env, kv, url, method === "DELETE" ? sameSite : jsonOk);
   }
   return fail(404, "not_found", "Not found.");

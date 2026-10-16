@@ -100,7 +100,28 @@ const SCHEMA = [
     PRIMARY KEY (user_id, provider),
     UNIQUE (provider, external_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS account_flags (
+    user_id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    name TEXT NOT NULL,
+    admin INTEGER NOT NULL DEFAULT 0,
+    verified INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  )`,
 ];
+
+/** Columns added after a table first shipped; "duplicate column" means already done. */
+const MIGRATIONS = [`ALTER TABLE comments ADD COLUMN verified INTEGER NOT NULL DEFAULT 0`];
+
+async function migrate(db: D1Database) {
+  for (const sql of MIGRATIONS) {
+    try {
+      await db.prepare(sql).run();
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e))) throw e;
+    }
+  }
+}
 
 /**
  * Starting prices, written once into a fresh database (admins change them
@@ -135,6 +156,7 @@ let ready: Promise<void> | null = null;
 export function ensureSchema(db: D1Database) {
   ready ??= db
     .batch(SCHEMA.map((s) => db.prepare(s)))
+    .then(() => migrate(db))
     .then(() => seed(db))
     .then(
       () => undefined,

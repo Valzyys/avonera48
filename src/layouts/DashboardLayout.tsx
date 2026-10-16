@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
 import { LogoMark } from "@/components/layout/Logo";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { Icon, type IconName } from "@/components/ui";
+import { Icon, Verified, type IconName } from "@/components/ui";
 import { useAuth, type Account } from "@/features/auth/AuthContext";
 import { shop, type Catalog } from "@/features/members/api";
 import { toDashShows, type DashShow } from "@/features/members/stage";
@@ -215,7 +215,10 @@ function Shell({ user }: { user: Account }) {
               <Link to="/dashboard/profile" className="dash-me">
                 <UserAvatar user={user} size={36} />
                 <span className="dash-me__text">
-                  <b>{user.name}</b>
+                  <b>
+                    {user.name}
+                    {user.verified && <Verified size={13} />}
+                  </b>
                   <small>{user.email}</small>
                 </span>
               </Link>
