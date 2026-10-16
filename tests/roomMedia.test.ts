@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-// Exercise the complete exchange: redirects must not leave the fixed-IP relay.
+// Exercise the complete exchange through the site Worker, without another server.
 import { afterEach, beforeEach, vi } from "vitest";
 import { openProxied, roomMedia } from "../worker/roomMedia";
 import { mediaUrls } from "../worker/mediaUrls";
+import { partnerCall } from "../worker/partner";
 
-const env = { PARTNER_SECRET: "test-secret", PARTNER_API_BASE: "https://relay.example" };
+// Old deployed variables must not reroute Worker requests to another server.
+const env = { PARTNER_SECRET: "test-secret", PARTNER_API_BASE: "https://obsolete-relay.example", PARTNER_MEDIA_BASE: "https://obsolete-media.example" };
 const playback = "https://partner.example/api/partner/p/one-time";
 const main = "https://partner.example/api/partner/s/main";
 const response = () => Response.json({ ok: true, playlist_url: main, play_header_name: "X-Play-Key", play_header_value: "private-key" });
@@ -24,17 +26,31 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("relay playback exchange", () => {
-  it("keeps redirects, cookies and media requests on the relay", async () => {
+describe("Worker playback proxy", () => {
+  it("sends signed API calls directly to the partner despite old relay variables", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ ok: true, playback_url: playback }));
+    const payload = { show_slug: "jkt48_official", viewer_id: "viewer", ttl: 120 };
+    const result = await partnerCall({ ...env, PARTNER_KEY_ID: "test-key", PARTNER_SERVER_IP: "192.0.2.1" }, "POST", "/api/public/partner/v1/session", payload);
+    expect(result.ok).toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://jkt48connect.com/api/public/partner/v1/session");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify(payload));
+    expect(fetchMock.mock.calls[0][1].headers["X-Partner-Key"]).toBe("test-key");
+    expect(fetchMock.mock.calls[0][1].headers["X-Signature"]).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("opens exact partner URLs and keeps cookies and media requests in the Worker", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "/api/partner/p/open", "set-cookie": "viewer=bound; Path=/; HttpOnly" } }))
       .mockResolvedValueOnce(response())
       .mockResolvedValueOnce(new Response("#EXTM3U\nsegment.ts", { headers: { "content-type": "application/vnd.apple.mpegurl" } }));
     const opened = await openProxied(env, kv, "viewer", playback, null, "viewer-agent");
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["https://relay.example/api/partner/p/one-time", "https://relay.example/api/partner/p/open"]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["https://partner.example/api/partner/p/one-time", "https://partner.example/api/partner/p/open"]);
     expect(fetchMock.mock.calls[0][1].redirect).toBe("manual");
     expect(fetchMock.mock.calls[1][1].headers.get("cookie")).toBe("viewer=bound");
     expect(JSON.parse(values.get("media:viewer")!).cookie).toBe("viewer=bound");
     expect(JSON.stringify(opened)).not.toContain("private-key");
+    // Simulate an existing KV context saved by the old relay version.
+    const saved = JSON.parse(values.get("media:viewer")!);
+    values.set("media:viewer", JSON.stringify({ ...saved, via: "https://obsolete-relay.example" }));
     const url = new URL(opened.playlist_url, "https://site.example");
     const media = await roomMedia(new Request(url), env, kv, url);
     expect(media.status).toBe(200);
@@ -46,23 +62,23 @@ describe("relay playback exchange", () => {
     const segment = new URL(manifest.split("\n")[1], "https://site.example");
     const codec = await mediaUrls(env.PARTNER_SECRET, "viewer");
     expect(await codec.open(segment.searchParams.get("r")!)).toBe("https://partner.example/api/partner/s/segment.ts");
-    expect(fetchMock.mock.calls[2][0]).toBe("https://relay.example/api/partner/s/main");
+    expect(fetchMock.mock.calls[2][0]).toBe("https://partner.example/api/partner/s/main");
     expect(fetchMock.mock.calls[2][1].headers.get("X-Play-Key")).toBe("private-key");
     expect(fetchMock.mock.calls[2][1].headers.get("cookie")).toBe("viewer=bound");
   });
 
-  it("resolves relative playback URLs and relay Location headers with a base path", async () => {
-    fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://relay.example/forward/api/partner/p/open" } }))
+  it("resolves relative playback URLs using the final partner URL", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://partner.example/api/partner/p/open?token=one-time" } }))
       .mockResolvedValueOnce(Response.json({ ok: true, playlist_url: "../s/main", play_header_name: "X-Play-Key", play_header_value: "key" }));
-    const opened = await openProxied({ ...env, PARTNER_MEDIA_BASE: "https://relay.example/forward" }, kv, "viewer", playback, null, "agent");
-    expect(fetchMock.mock.calls[1][0]).toBe("https://relay.example/forward/api/partner/p/open");
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://partner.example/api/partner/p/open?token=one-time");
     const url = new URL(opened.playlist_url, "https://site.example");
     expect(url.searchParams.has("u")).toBe(false);
     const codec = await mediaUrls(env.PARTNER_SECRET, "viewer");
     expect(await codec.open(url.searchParams.get("r")!)).toBe(main);
   });
 
-  it("resumes a refused media session through the relay with rotated credentials", async () => {
+  it("resumes a refused media session in the Worker with rotated credentials", async () => {
     fetchMock.mockResolvedValueOnce(response())
       .mockResolvedValueOnce(new Response(null, { status: 403 }))
       .mockResolvedValueOnce(new Response(null, { status: 307, headers: { location: "/api/partner/resume-ready", "set-cookie": "viewer=renewed; Path=/" } }))
@@ -73,7 +89,7 @@ describe("relay playback exchange", () => {
     const media = await roomMedia(new Request(url, { headers: { range: "bytes=0-6" } }), env, kv, url);
     expect(media.status).toBe(206);
     expect(media.headers.get("content-range")).toBe("bytes 0-6/7");
-    expect(fetchMock.mock.calls[2][0]).toBe("https://relay.example/api/partner/resume");
+    expect(fetchMock.mock.calls[2][0]).toBe("https://partner.example/api/partner/resume");
     expect(fetchMock.mock.calls[4][1].headers.get("X-Play-Key")).toBe("renewed-key");
     expect(fetchMock.mock.calls[4][1].headers.get("cookie")).toBe("viewer=renewed");
     expect(fetchMock.mock.calls[4][1].headers.get("range")).toBe("bytes=0-6");
@@ -92,11 +108,11 @@ describe("relay playback exchange", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("reports an HTML relay fallback and missing playback route clearly", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("<!doctype html><title>Relay</title>"));
+  it("reports invalid partner responses and partner playback 404 clearly", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<!doctype html><title>Not JSON</title>"));
     await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({ code: "playback_invalid_response" });
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
-    await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({ code: "playback_route_missing" });
+    await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({ code: "playback_not_found" });
     expect(kv.put).not.toHaveBeenCalled();
   });
 

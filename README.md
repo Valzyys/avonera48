@@ -37,17 +37,11 @@ npx wrangler secret put PARTNER_SECRET
 npx wrangler secret put PARTNER_SERVER_IP   # the server IP registered with the partner
 ```
 
-The partner checks that signed calls come from the registered IP. Cloudflare Workers and Pages have no fixed outbound IP. If the partner rejects calls with `SIGNATURE_REJECTED`, run the signed calls through a relay that has the registered IP, and point `PARTNER_API_BASE` at that relay.
+The site's Cloudflare Worker calls `https://jkt48connect.com` directly for signed API requests and opens the exact playback URL returned by the partner. The same Worker handles playlists, keys, segments, redirects, cookies and resume. The browser only loads `/api/room/media?t=…&r=…` on this site's domain.
 
-The room's video always goes through this site: the server opens the partner playback itself and the player only loads `/api/room/media?t=…&r=…`, so the partner's address never appears in the browser. The partner binds a viewer session to the network that opened it, and Workers/Pages change outbound IP between requests, so the playback, playlists and segments must also go through the fixed-IP relay. They use `PARTNER_MEDIA_BASE` (optional; defaults to `PARTNER_API_BASE`). The relay has to forward every path (including `/api/partner/p/…`, `/api/partner/s/…` and `/api/partner/resume`) with its headers (`X-Play-Key`, `Cookie`, `Range`) to the partner and pass back `Set-Cookie`.
+Media references (`r`) are authenticated AES-GCM ciphertext bound to the viewer. Upstream URLs are never sent as readable or URL-encoded query parameters; playback credentials and cookies stay on the server.
 
-Playback redirects are followed explicitly through the same relay, retaining session cookies. The relay must pass redirects and `Set-Cookie` back unchanged; it must not follow redirects itself or serve an HTML fallback for `/api/partner/*`. Forward the query string, `Accept`, `User-Agent`, `X-Play-Key`, `Cookie` and `Range` unchanged. Both API and media relay settings must use the registered outbound IP.
-
-If opening a room fails, `/api/room/session` distinguishes `playback_route_missing` (404 from the relay), `playback_invalid_response` (HTML or incomplete JSON), `playback_refused` (HTTP rejection) and `playback_unreachable` (network or redirect failure). Check the relay's playback routes and Worker logs without sharing playback URLs, cookies or signing secrets.
-
-Media references (`r`) are authenticated AES-GCM ciphertext bound to the viewer; upstream URLs are never sent as readable or URL-encoded query parameters. Playback credentials and cookies stay on the server.
-
-For playback HTTP 404, see [relay setup and Nginx media routes](docs/partner-relay.md).
+No VPS, Nginx configuration or external relay is used. The former `PARTNER_API_BASE` and `PARTNER_MEDIA_BASE` variables are ignored and can be removed from deployment settings. See [Worker playback proxy](docs/worker-proxy.md) for setup and troubleshooting.
 
 ## Tickets, memberships and payments
 

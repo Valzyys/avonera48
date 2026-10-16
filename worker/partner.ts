@@ -1,19 +1,12 @@
 /**
  * Theater room video through the upstream partner API. All signed calls
- * happen here, server side; the browser only ever receives a short-lived,
- * single-use playback URL for its own viewer session.
+ * happen here, server side. The site Worker also proxies playback and media;
+ * the browser only receives encrypted same-origin media references.
  *
  * Secrets (never in the repo):
  *   PARTNER_KEY_ID     key id
  *   PARTNER_SECRET     signing secret
  *   PARTNER_SERVER_IP  the server IP registered with the partner dashboard
- * Optional:
- *   PARTNER_API_BASE   base URL for the signed calls (default: the upstream
- *                      origin), e.g. a fixed-IP relay that forwards them.
- *   PARTNER_MEDIA_BASE base URL the room's playback, playlists and segments
- *                      are fetched through (default: PARTNER_API_BASE). The
- *                      partner binds a viewer session to the network that
- *                      opened it, so this should be a fixed-IP relay too.
  *
  * Signing: subkey = HMAC(secret, "YYYY-MM-DD|keyId|serverIp") per UTC day,
  * signature = HMAC(subkey bytes, "ts:nonce:METHOD:path:sha256(body)").
@@ -23,8 +16,6 @@ export interface PartnerEnv {
   PARTNER_KEY_ID?: string;
   PARTNER_SECRET?: string;
   PARTNER_SERVER_IP?: string;
-  PARTNER_API_BASE?: string;
-  PARTNER_MEDIA_BASE?: string;
 }
 
 const UPSTREAM = "https://jkt48connect.com";
@@ -38,7 +29,6 @@ async function hmac(key: Uint8Array, msg: string) {
 }
 
 export const partnerReady = (env: PartnerEnv) => !!(env.PARTNER_KEY_ID && env.PARTNER_SECRET && env.PARTNER_SERVER_IP);
-export const partnerOrigin = (env: PartnerEnv) => (env.PARTNER_API_BASE || UPSTREAM).replace(/\/+$/, "");
 
 async function signedHeaders(env: PartnerEnv, method: string, path: string, body: string) {
   const day = new Date().toISOString().slice(0, 10);
@@ -69,7 +59,7 @@ export async function partnerCall<T>(env: PartnerEnv, method: "GET" | "POST", pa
   const headers = await signedHeaders(env, method, path, body);
   let res: Response;
   try {
-    res = await fetch(`${partnerOrigin(env)}${path}`, { method, headers, body: method === "POST" ? body : undefined });
+    res = await fetch(`${UPSTREAM}${path}`, { method, headers, body: method === "POST" ? body : undefined });
   } catch {
     return { ok: false, status: 502, data: { code: "UPSTREAM_UNREACHABLE" } as PartnerResult<T>["data"] };
   }
