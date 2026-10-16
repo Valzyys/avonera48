@@ -1,14 +1,14 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Navigate } from "react-router";
-import { Button, Dialog, ErrorState, Icon, SkeletonRows } from "@/components/ui";
-import { admin, ApiError, rupiah, type AdminPlan, type AdminUser, type AdminVoucher, type Order, type PlanDraft } from "@/features/members/api";
+import { Button, Dialog, ErrorState, Icon, SkeletonRows, Verified } from "@/components/ui";
+import { admin, ApiError, rupiah, type AdminAccount, type AdminPlan, type AdminUser, type AdminVoucher, type Order, type PlanDraft } from "@/features/members/api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useResource } from "@/hooks/useResource";
 import { DashHead, useDash } from "@/layouts/DashboardLayout";
 import { cx, formatDate, formatDateTime } from "@/utils/format";
 import { StatusChip } from "./parts";
 
-type Tab = "overview" | "orders" | "plans" | "pricing" | "vouchers" | "members" | "community";
+type Tab = "overview" | "orders" | "plans" | "pricing" | "vouchers" | "members" | "community" | "accounts";
 
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
@@ -17,6 +17,7 @@ const TABS: [Tab, string][] = [
   ["pricing", "Products"],
   ["vouchers", "Vouchers"],
   ["members", "Members"],
+  ["accounts", "Accounts"],
   ["community", "Community"],
 ];
 
@@ -41,6 +42,7 @@ export default function AdminPage() {
       {tab === "pricing" && <Pricing />}
       {tab === "vouchers" && <Vouchers />}
       {tab === "members" && <Members />}
+      {tab === "accounts" && <Accounts />}
       {tab === "community" && <Community />}
     </div>
   );
@@ -55,6 +57,166 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <small className="meta">{hint}</small>}
     </label>
+  );
+}
+
+/* ---------- accounts: admins and verified ---------- */
+
+function AccountRow({ a, onChange }: { a: AdminAccount; onChange: (a: AdminAccount) => void }) {
+  const [busy, setBusy] = useState<"admin" | "verified" | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const flip = async (key: "admin" | "verified") => {
+    setBusy(key);
+    setMsg(null);
+    try {
+      onChange(await admin.setAccount(a.email, { [key]: !a[key] }));
+    } catch (e) {
+      setMsg(errText(e));
+    }
+    setBusy(null);
+  };
+  return (
+    <li className="acct-row">
+      <span className="acct-row__who">
+        <b>
+          {a.name}
+          {a.verified && <Verified size={14} />}
+        </b>
+        <span className="meta">{a.email}</span>
+      </span>
+      <span className="acct-row__tags">
+        {a.owner && <span className="chip chip--warn">Owner</span>}
+        {a.admin && !a.owner && <span className="chip chip--ok">Admin</span>}
+      </span>
+      <span className="acct-row__actions">
+        <Button size="sm" variant={a.verified ? "secondary" : "primary"} loading={busy === "verified"} onClick={() => flip("verified")}>
+          {a.verified ? "Remove check" : "Verify"}
+        </Button>
+        {!a.owner && (
+          <Button size="sm" variant={a.admin ? "ghost" : "secondary"} loading={busy === "admin"} onClick={() => flip("admin")}>
+            {a.admin ? "Remove admin" : "Make admin"}
+          </Button>
+        )}
+      </span>
+      {msg && <span className="form-msg is-bad acct-row__msg">{msg}</span>}
+    </li>
+  );
+}
+
+function Accounts() {
+  const res = useResource(() => admin.accounts(), []);
+  const [list, setList] = useState<AdminAccount[] | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", password: "", admin: true, verified: false });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [find, setFind] = useState("");
+  const [found, setFound] = useState<AdminAccount | null>(null);
+  const [findMsg, setFindMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (res.data) setList(res.data);
+  }, [res.data]);
+
+  const upsert = (a: AdminAccount) => {
+    setList((l) => {
+      const rest = (l ?? []).filter((x) => x.id !== a.id);
+      return a.admin || a.verified || a.owner ? [a, ...rest] : rest;
+    });
+    setFound((f) => (f?.id === a.id ? a : f));
+  };
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const a = await admin.createAccount(form);
+      upsert(a);
+      setForm({ name: "", email: "", password: "", admin: true, verified: false });
+      setMsg({ ok: true, text: `Created ${a.email}. Share the password with them privately.` });
+    } catch (err) {
+      setMsg({ ok: false, text: errText(err) });
+    }
+    setBusy(false);
+  };
+
+  const lookup = async (e: FormEvent) => {
+    e.preventDefault();
+    setFindMsg(null);
+    setFound(null);
+    try {
+      setFound(await admin.account(find.trim()));
+    } catch (err) {
+      setFindMsg(errText(err));
+    }
+  };
+
+  if (res.status === "error") return <ErrorState error={res.error} onRetry={res.reload} />;
+
+  return (
+    <div className="acct">
+      <form className="dash-panel" onSubmit={create}>
+        <h2 className="dash-panel__title">Create an account</h2>
+        <p className="meta">For a new admin or a verified account. They can change the password later on their profile.</p>
+        <div className="admin-form__row">
+          <Field label="Name">
+            <input className="dash-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required minLength={2} maxLength={40} />
+          </Field>
+          <Field label="Email">
+            <input className="dash-input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          </Field>
+        </div>
+        <Field label="Password" hint="8 characters or more.">
+          <input className="dash-input" type="text" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
+        </Field>
+        <div className="acct__checks">
+          <label className="admin-check">
+            <input type="checkbox" checked={form.admin} onChange={(e) => setForm({ ...form, admin: e.target.checked })} /> Admin
+          </label>
+          <label className="admin-check">
+            <input type="checkbox" checked={form.verified} onChange={(e) => setForm({ ...form, verified: e.target.checked })} /> Verified <Verified size={14} />
+          </label>
+        </div>
+        <div className="dash-panel__foot">
+          {msg && <span className={`form-msg ${msg.ok ? "is-ok" : "is-bad"}`}>{msg.text}</span>}
+          <Button type="submit" variant="primary" loading={busy}>
+            Create account
+          </Button>
+        </div>
+      </form>
+
+      <form className="dash-panel" onSubmit={lookup}>
+        <h2 className="dash-panel__title">Find an account</h2>
+        <p className="meta">Verify any member or make them an admin.</p>
+        <div className="admin-inline">
+          <input className="dash-input" type="email" placeholder="member@email.com" value={find} onChange={(e) => setFind(e.target.value)} required />
+          <Button type="submit" variant="secondary" icon="search">
+            Find
+          </Button>
+        </div>
+        {findMsg && <p className="form-msg is-bad">{findMsg}</p>}
+        {found && (
+          <ul className="acct-list">
+            <AccountRow a={found} onChange={upsert} />
+          </ul>
+        )}
+      </form>
+
+      <section className="dash-panel">
+        <h2 className="dash-panel__title">Admins and verified accounts</h2>
+        {!list ? (
+          <SkeletonRows rows={3} />
+        ) : list.length ? (
+          <ul className="acct-list">
+            {list.map((a) => (
+              <AccountRow key={a.id} a={a} onChange={upsert} />
+            ))}
+          </ul>
+        ) : (
+          <p className="meta">Nobody yet.</p>
+        )}
+      </section>
+    </div>
   );
 }
 

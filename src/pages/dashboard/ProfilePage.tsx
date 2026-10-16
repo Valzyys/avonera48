@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { Button, Icon } from "@/components/ui";
+import { Button, Icon, Verified } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
 import { ApiError, prepareAvatar, profile } from "@/features/members/api";
 import { LinkedAccountPanel } from "@/features/members/LinkedAccount";
@@ -100,7 +100,10 @@ export default function ProfilePage() {
         </div>
 
         <div className="prof-info">
-          <span className="prof-info__name">{user.name}</span>
+          <span className="prof-info__name">
+            {user.name}
+            {user.verified && <Verified size={22} />}
+          </span>
           <span className="meta">{user.email}</span>
           <div className="prof-badges">
             <span className="chip chip--mute">Member since {formatDate(user.createdAt)}</span>

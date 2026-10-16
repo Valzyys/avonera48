@@ -6,3 +6,4 @@ export * from "./Feedback";
 export * from "./Field";
 export * from "./Icon";
 export * from "./Tabs";
+export * from "./Verified";

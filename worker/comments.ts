@@ -13,7 +13,7 @@
 
 import { ensureSchema } from "./db";
 import { body, fail, reply, str } from "./http";
-import { accessTo, isAdmin, type ShopEnv, type Viewer } from "./shop";
+import { accessTo, type ShopEnv, type Viewer } from "./shop";
 
 interface Row {
   id: number;
@@ -22,9 +22,10 @@ interface Row {
   avatar: string | null;
   body: string;
   created_at: number;
+  verified: number | null;
 }
 
-const out = (r: Row, me: string) => ({ id: r.id, name: r.name, avatar: r.avatar, body: r.body, at: r.created_at, mine: r.user_id === me });
+const out = (r: Row, me: string) => ({ id: r.id, name: r.name, avatar: r.avatar, body: r.body, at: r.created_at, mine: r.user_id === me, verified: !!r.verified });
 
 async function since(db: D1Database, show: string, after: number) {
   if (after > 0) return (await db.prepare("SELECT * FROM comments WHERE show = ? AND id > ? ORDER BY id LIMIT 100").bind(show, after).all<Row>()).results;
@@ -65,7 +66,7 @@ export async function handleComments(request: Request, env: ShopEnv, viewer: Vie
   const db = env.DB;
   await ensureSchema(db);
   const show = m[1];
-  const admin = isAdmin(env, viewer.email);
+  const admin = !!viewer.admin;
   if (!admin && !(await accessTo(db, viewer.id, show))) return fail(402, "no_access", "Get a ticket or a membership to join the chat.");
 
   if (request.method === "GET") {
@@ -84,10 +85,10 @@ export async function handleComments(request: Request, env: ShopEnv, viewer: Vie
     if (last && Date.now() - last.created_at < 2000) return fail(429, "slow_down", "Slow down a little.");
     const now = Date.now();
     const r = await db
-      .prepare("INSERT INTO comments (show, user_id, name, avatar, body, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(show, viewer.id, viewer.name, viewer.avatar ?? null, text, now)
+      .prepare("INSERT INTO comments (show, user_id, name, avatar, body, created_at, verified) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(show, viewer.id, viewer.name, viewer.avatar ?? null, text, now, viewer.verified ? 1 : 0)
       .run();
-    return reply({ ok: true, comment: { id: r.meta.last_row_id, name: viewer.name, avatar: viewer.avatar ?? null, body: text, at: now, mine: true } });
+    return reply({ ok: true, comment: { id: r.meta.last_row_id, name: viewer.name, avatar: viewer.avatar ?? null, body: text, at: now, mine: true, verified: !!viewer.verified } });
   }
 
   if (request.method === "DELETE" && m[2] && /^\d+$/.test(m[2])) {

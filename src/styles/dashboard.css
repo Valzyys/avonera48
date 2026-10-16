@@ -3444,3 +3444,67 @@ a.ov-show__title:hover {
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--line-2);
 }
+
+/* ---------- verified check ---------- */
+.verified {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.15em;
+  margin-left: 4px;
+}
+
+/* ---------- admin: accounts ---------- */
+.acct {
+  display: grid;
+  gap: var(--s-4);
+}
+.acct__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.acct-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+.acct-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+}
+.acct-row__who {
+  display: grid;
+  min-width: 0;
+}
+.acct-row__who b {
+  display: inline-flex;
+  align-items: center;
+}
+.acct-row__who .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acct-row__tags,
+.acct-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.acct-row__msg {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .acct-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .acct-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

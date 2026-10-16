@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { CheckoutDialog, type CheckoutItem } from "@/components/domain/CheckoutDialog";
 import { TheaterPlayer, type Playback } from "@/components/domain/TheaterPlayer";
 import { MemberPhoto, oshi, ShowArt } from "@/components/media/Media";
-import { Icon, Skeleton } from "@/components/ui";
+import { Icon, Skeleton, Verified } from "@/components/ui";
 import { accessOf, ApiError, chat, type ChatMessage } from "@/features/members/api";
 import { formatCountdown, useClock } from "@/hooks/useClock";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -356,7 +356,10 @@ function Chat({ show, canModerate, me }: { show: string; canModerate: boolean; m
             <UserAvatar user={{ name: m.name, avatar: m.avatar }} size={30} />
             <div className="chat__bubble">
               <span className="chat__meta">
-                <b>{m.name}</b>
+                <b>
+                  {m.name}
+                  {m.verified && <Verified size={13} />}
+                </b>
                 <time dateTime={new Date(m.at).toISOString()}>{new Date(m.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time>
               </span>
               <p>{m.body}</p>
