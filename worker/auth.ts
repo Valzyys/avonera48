@@ -291,12 +291,15 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
   // Always through this site: the server opens the playback URL and hands the
   // player same-origin URLs, so the partner's address never reaches the browser.
   try {
-    const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
+    const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0", new URL(request.url).origin);
     return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
   } catch (error) {
     if (error instanceof PlaybackError) {
-      console.warn("[room] playback failed", error.code);
-      return fail(502, error.code, error.message);
+      console.warn("[room] playback failed", error.code, error.diagnostic ?? null);
+      return reply({
+        ok: false, error: error.code, message: error.message,
+        ...(adminOf(env, user) && error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+      }, 502);
     }
     throw error;
   }

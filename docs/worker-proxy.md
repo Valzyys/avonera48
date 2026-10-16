@@ -1,6 +1,11 @@
 # Worker playback proxy
 
-The existing site Worker handles the entire theater playback flow:
+The existing site Worker handles the entire theater playback flow. Playback,
+media and resume forward the site origin and origin-only Referer, derived from
+the authenticated room request URL, for the partner's registered-domain checks.
+They never substitute the partner's own domain as the caller.
+
+The flow:
 
 1. Sign calls to `https://jkt48connect.com/api/public/partner/v1/*` using the
    configured partner key, secret and registered server IP.
@@ -36,6 +41,15 @@ player URLs using a readable `u` parameter are rejected.
 `playback_refused` means another HTTP rejection, and `playback_unreachable`
 means a network or redirect failure. Logs record statuses without playback URLs,
 cookies or signing secrets.
+
+When an authenticated admin opens a room, playback failures include a
+`diagnostic` object with `stage`, `upstream_status`, `response_kind` and
+`partner_code` (only documented partner codes). Normal viewers receive no
+diagnostic object. Response bodies, upstream URLs, tokens, cookies and raw partner
+messages are never included. `playback_origin_not_allowed` identifies a partner
+`ORIGIN_NOT_ALLOWED` rejection; `playback_binding_mismatch` identifies
+`SESSION_BINDING_MISMATCH`. An HTML 404 is different from a JSON rejection and
+needs the partner's route/deployment checked against its documentation.
 
 Cloudflare Workers do not guarantee a fixed outbound IP. This implementation
 keeps all requests inside the site's Worker, but the partner must permit Worker

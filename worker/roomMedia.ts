@@ -27,6 +27,7 @@ export interface MediaCtx {
   headerValue: string;
   cookie: string;
   ua: string;
+  siteOrigin?: string;
   resume: string | null;
   exp: number;
 }
@@ -108,8 +109,15 @@ async function partnerFetch(target: string, headers: HeadersInit, cookie = "") {
   throw new Error("Too many playback redirects");
 }
 
+export interface PlaybackDiagnostic {
+  stage: "playback";
+  upstream_status: number;
+  response_kind: "json" | "html" | "other";
+  partner_code: string | null;
+}
+
 export class PlaybackError extends Error {
-  constructor(public code: string, message: string) {
+  constructor(public code: string, message: string, public diagnostic?: PlaybackDiagnostic) {
     super(message);
   }
 }
@@ -125,34 +133,61 @@ interface PlaybackJson {
   code?: string;
 }
 
+/** Preserve the actual site's identity for the partner's domain checks. */
+function viewerHeaders(ua: string, siteOrigin?: string) {
+  return { "user-agent": ua, ...(siteOrigin ? { origin: siteOrigin, referer: `${siteOrigin}/` } : {}) };
+}
+
+// Only documented codes can leave the server; upstream messages may contain URLs.
+const PARTNER_CODES = new Set([
+  "BAD_REQUEST", "SHOW_NOT_PURCHASED", "STALE_REQUEST", "REPLAY_DETECTED",
+  "KEY_NOT_FOUND", "VIEW_QUOTA_EXCEEDED", "SIGNATURE_REJECTED", "ORIGIN_NOT_ALLOWED",
+  "SESSION_BINDING_MISMATCH", "PLAY_HEADER_REQUIRED", "PLAY_HEADER_INVALID",
+  "VARIANT_NOT_ALLOWED", "KEY_LOCKED", "PARTNER_SUSPENDED",
+]);
+
+function playbackDiagnostic(res: Response, payload: unknown): PlaybackDiagnostic {
+  const raw = payload && typeof payload === "object" && "code" in payload ? payload.code : null;
+  const partnerCode = typeof raw === "string" && PARTNER_CODES.has(raw) ? raw : null;
+  const type = res.headers.get("content-type") ?? "";
+  return {
+    stage: "playback", upstream_status: res.status,
+    response_kind: /json/i.test(type) ? "json" : /html/i.test(type) ? "html" : "other",
+    partner_code: partnerCode,
+  };
+}
+
 /**
  * Opens a playback URL server side and returns same-origin URLs for the
  * player, or a safe error when the partner refuses.
  */
-export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string, playbackUrl: string, resumeUrl: string | null, ua: string) {
+export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string, playbackUrl: string, resumeUrl: string | null, ua: string, siteOrigin?: string) {
   let opened: Awaited<ReturnType<typeof partnerFetch>>;
   try {
-    opened = await partnerFetch(playbackUrl, { accept: "application/json", "user-agent": ua });
+    opened = await partnerFetch(playbackUrl, { accept: "application/json", ...viewerHeaders(ua, siteOrigin) });
   } catch {
     throw new PlaybackError("playback_unreachable", "The video service could not be reached. Try again in a moment.");
   }
   const { response: res, cookie } = opened;
+  const payload: unknown = await res.json().catch(() => null);
+  const diagnostic = playbackDiagnostic(res, payload);
   if (!res.ok) {
-    // Never log the body or full URL: either can contain playback credentials.
-    console.warn("[room] playback refused", res.status);
-    if (res.status === 404) throw new PlaybackError("playback_not_found", "The video service is temporarily unavailable. Please try again later.");
-    throw new PlaybackError("playback_refused", "The video service refused playback. Please try again later.");
+    console.warn("[room] playback refused", diagnostic);
+    if (diagnostic.partner_code === "ORIGIN_NOT_ALLOWED") throw new PlaybackError("playback_origin_not_allowed", "The video service has not enabled playback for this site.", diagnostic);
+    if (diagnostic.partner_code === "SESSION_BINDING_MISMATCH") throw new PlaybackError("playback_binding_mismatch", "The video service rejected this playback session.", diagnostic);
+    if (res.status === 404) throw new PlaybackError("playback_not_found", "The video service is temporarily unavailable. Please try again later.", diagnostic);
+    throw new PlaybackError("playback_refused", "The video service refused playback. Please try again later.", diagnostic);
   }
-  const j = (await res.json().catch(() => null)) as PlaybackJson | null;
-  if (!j) throw new PlaybackError("playback_invalid_response", "The video service returned an invalid response. Please try again later.");
+  const j = payload as PlaybackJson | null;
+  if (!j) throw new PlaybackError("playback_invalid_response", "The video service returned an invalid response. Please try again later.", diagnostic);
   const main = j.auto_playlist_url || j.playlist_url;
   if (!j.ok || !main || !j.play_header_name || !j.play_header_value) {
-    throw new PlaybackError("playback_invalid_response", "The video service could not open playback. Please try again later.");
+    throw new PlaybackError("playback_invalid_response", "The video service could not open playback. Please try again later.", diagnostic);
   }
   const playlist = new URL(main, opened.url);
   const origin = playlist.origin;
   const exp = Math.floor(Date.now() / 1000) + TTL;
-  await saveCtx(kv, uid, { origin, headerName: j.play_header_name, headerValue: j.play_header_value, cookie, ua, resume: resumeUrl, exp });
+  await saveCtx(kv, uid, { origin, headerName: j.play_header_name, headerValue: j.play_header_value, cookie, ua, siteOrigin, resume: resumeUrl, exp });
   const token = await makeToken(env, uid, exp);
   const codec = await mediaUrls(env.PARTNER_SECRET!, uid);
   const wrap = async (u: string) => `/api/room/media?t=${token}&r=${await codec.seal(u)}`;
@@ -163,7 +198,7 @@ export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string,
 }
 
 async function upstream(ctx: MediaCtx, url: string, request: Request) {
-  const headers: Record<string, string> = { [ctx.headerName]: ctx.headerValue, "user-agent": ctx.ua };
+  const headers: Record<string, string> = { [ctx.headerName]: ctx.headerValue, ...viewerHeaders(ctx.ua, ctx.siteOrigin) };
   if (ctx.cookie) headers.cookie = ctx.cookie;
   const range = request.headers.get("range");
   if (range) headers.range = range;
@@ -197,7 +232,7 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
     if ((res.status === 401 || res.status === 403) && ctx.resume) {
       // Session refused: resume once (new play header), then retry.
       await res.body?.cancel();
-      const resumed = await partnerFetch(ctx.resume, { accept: "application/json", "user-agent": ctx.ua }, ctx.cookie);
+      const resumed = await partnerFetch(ctx.resume, { accept: "application/json", ...viewerHeaders(ctx.ua, ctx.siteOrigin) }, ctx.cookie);
       const r = resumed.response;
       const j = (await r.json().catch(() => ({}))) as PlaybackJson;
       if (r.ok && j.ok && j.play_header_value) {

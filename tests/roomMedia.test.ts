@@ -4,6 +4,8 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { openProxied, roomMedia } from "../worker/roomMedia";
 import { mediaUrls } from "../worker/mediaUrls";
 import { partnerCall } from "../worker/partner";
+import { handleAuth } from "../worker/auth";
+import { sha256 } from "../worker/http";
 
 // Old deployed variables must not reroute Worker requests to another server.
 const env = { PARTNER_SECRET: "test-secret", PARTNER_API_BASE: "https://obsolete-relay.example", PARTNER_MEDIA_BASE: "https://obsolete-media.example" };
@@ -42,9 +44,11 @@ describe("Worker playback proxy", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "/api/partner/p/open", "set-cookie": "viewer=bound; Path=/; HttpOnly" } }))
       .mockResolvedValueOnce(response())
       .mockResolvedValueOnce(new Response("#EXTM3U\nsegment.ts", { headers: { "content-type": "application/vnd.apple.mpegurl" } }));
-    const opened = await openProxied(env, kv, "viewer", playback, null, "viewer-agent");
+    const opened = await openProxied(env, kv, "viewer", playback, null, "viewer-agent", "https://site.example");
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["https://partner.example/api/partner/p/one-time", "https://partner.example/api/partner/p/open"]);
     expect(fetchMock.mock.calls[0][1].redirect).toBe("manual");
+    expect(fetchMock.mock.calls[0][1].headers.get("origin")).toBe("https://site.example");
+    expect(fetchMock.mock.calls[1][1].headers.get("referer")).toBe("https://site.example/");
     expect(fetchMock.mock.calls[1][1].headers.get("cookie")).toBe("viewer=bound");
     expect(JSON.parse(values.get("media:viewer")!).cookie).toBe("viewer=bound");
     expect(JSON.stringify(opened)).not.toContain("private-key");
@@ -65,6 +69,7 @@ describe("Worker playback proxy", () => {
     expect(fetchMock.mock.calls[2][0]).toBe("https://partner.example/api/partner/s/main");
     expect(fetchMock.mock.calls[2][1].headers.get("X-Play-Key")).toBe("private-key");
     expect(fetchMock.mock.calls[2][1].headers.get("cookie")).toBe("viewer=bound");
+    expect(fetchMock.mock.calls[2][1].headers.get("origin")).toBe("https://site.example");
   });
 
   it("resolves relative playback URLs using the final partner URL", async () => {
@@ -84,12 +89,14 @@ describe("Worker playback proxy", () => {
       .mockResolvedValueOnce(new Response(null, { status: 307, headers: { location: "/api/partner/resume-ready", "set-cookie": "viewer=renewed; Path=/" } }))
       .mockResolvedValueOnce(Response.json({ ok: true, play_header_value: "renewed-key" }))
       .mockResolvedValueOnce(new Response("segment", { status: 206, headers: { "content-type": "video/mp2t", "content-range": "bytes 0-6/7" } }));
-    const opened = await openProxied(env, kv, "viewer", playback, "https://partner.example/api/partner/resume", "agent");
+    const opened = await openProxied(env, kv, "viewer", playback, "https://partner.example/api/partner/resume", "agent", "https://site.example");
     const url = new URL(opened.playlist_url, "https://site.example");
     const media = await roomMedia(new Request(url, { headers: { range: "bytes=0-6" } }), env, kv, url);
     expect(media.status).toBe(206);
     expect(media.headers.get("content-range")).toBe("bytes 0-6/7");
     expect(fetchMock.mock.calls[2][0]).toBe("https://partner.example/api/partner/resume");
+    expect(fetchMock.mock.calls[2][1].headers.get("origin")).toBe("https://site.example");
+    expect(fetchMock.mock.calls[4][1].headers.get("origin")).toBe("https://site.example");
     expect(fetchMock.mock.calls[4][1].headers.get("X-Play-Key")).toBe("renewed-key");
     expect(fetchMock.mock.calls[4][1].headers.get("cookie")).toBe("viewer=renewed");
     expect(fetchMock.mock.calls[4][1].headers.get("range")).toBe("bytes=0-6");
@@ -114,6 +121,35 @@ describe("Worker playback proxy", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
     await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({ code: "playback_not_found" });
     expect(kv.put).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("returns sanitized playback diagnostics only to admins (admin=%s)", async (admin) => {
+    const token = "a".repeat(64);
+    values.set(`sess:${await sha256(token)}`, JSON.stringify({ email: "viewer@example.com" }));
+    values.set("user:viewer@example.com", JSON.stringify({ id: "viewer", email: "viewer@example.com", name: "Viewer", ...(admin ? { role: "admin" } : {}) }));
+    fetchMock.mockResolvedValueOnce(Response.json({ ok: true, playback_url: playback }))
+      .mockResolvedValueOnce(Response.json({ ok: false, code: "ORIGIN_NOT_ALLOWED", message: `Denied ${playback}`, hint: "private-key" }, { status: 404 }));
+    const request = new Request("https://site.example/api/room/session", {
+      method: "POST", headers: { cookie: `avn_session=${token}`, origin: "https://site.example", "content-type": "application/json" }, body: JSON.stringify({ show: "jkt48_official" }),
+    });
+    const res = await handleAuth(request, { ...env, AUTH: kv, PARTNER_KEY_ID: "test-key", PARTNER_SERVER_IP: "192.0.2.1" }, new URL(request.url));
+    expect(res!.status).toBe(502);
+    const body = await res!.json();
+    expect(body.error).toBe("playback_origin_not_allowed");
+    if (admin) expect(body.diagnostic).toEqual({ stage: "playback", upstream_status: 404, response_kind: "json", partner_code: "ORIGIN_NOT_ALLOWED" });
+    else expect(body).not.toHaveProperty("diagnostic");
+    expect(JSON.stringify(body)).not.toContain("partner.example");
+    expect(JSON.stringify(body)).not.toContain("private-key");
+    expect(fetchMock.mock.calls[1][1].headers.get("origin")).toBe("https://site.example");
+  });
+
+  it("distinguishes HTML route failures from JSON domain rejections without exposing bodies", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<!doctype html>private-token", { status: 404, headers: { "content-type": "text/html" } }));
+    await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({
+      code: "playback_not_found", diagnostic: { upstream_status: 404, response_kind: "html", partner_code: null },
+    });
+    fetchMock.mockResolvedValueOnce(Response.json({ code: "https://partner.example/private-token" }, { status: 404 }));
+    await expect(openProxied(env, kv, "viewer", playback, null, "agent")).rejects.toMatchObject({ diagnostic: { partner_code: null } });
   });
 
   it("refuses redirects to unrelated hosts without forwarding credentials", async () => {
