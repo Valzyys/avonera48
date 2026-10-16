@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { CheckoutDialog, type CheckoutItem } from "@/components/domain/CheckoutDialog";
-import { exchangePlayback, resumePlayback, TheaterPlayer, type Playback } from "@/components/domain/TheaterPlayer";
+import { TheaterPlayer, type Playback } from "@/components/domain/TheaterPlayer";
 import { MemberPhoto, oshi, ShowArt } from "@/components/media/Media";
 import { Icon, Skeleton } from "@/components/ui";
 import { accessOf, ApiError, chat, type ChatMessage } from "@/features/members/api";
@@ -12,47 +12,40 @@ import { cx, formatTime } from "@/utils/format";
 import { teamLabel } from "@/utils/team";
 import { isOnStage, ShowAction, showWhen } from "./parts";
 
-type Mode = "proxy" | "direct";
-
 interface SessionJson {
   playlist_url?: string;
   qualities?: { label: string; playlist_url: string }[];
-  playback_url?: string;
-  resume_url?: string | null;
   message?: string;
 }
 
-/** Opens a viewer session for a show in the given mode. */
-async function openSession(show: string, mode: Mode): Promise<{ data: Playback; resume?: string }> {
+/**
+ * Opens a viewer session for a show. The server opens the partner playback
+ * itself and returns same-origin URLs (/api/room/media), so the browser
+ * never talks to the partner.
+ */
+async function openSession(show: string): Promise<Playback> {
   const res = await fetch("/api/room/session", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ show, proxy: mode === "proxy" }),
+    body: JSON.stringify({ show }),
   });
   const j = (await res.json().catch(() => ({}))) as SessionJson;
-  const fallback = "The room couldn’t open. Try again in a moment.";
-  if (mode === "proxy") {
-    if (!res.ok || !j.playlist_url) throw new ApiError(j.message ?? fallback, res.status);
-    return { data: { playlistUrl: j.playlist_url, qualities: (j.qualities ?? []).map((q) => ({ label: q.label, url: q.playlist_url })) } };
-  }
-  if (!res.ok || !j.playback_url) throw new ApiError(j.message ?? fallback, res.status);
-  const p = await exchangePlayback(j.playback_url);
-  if (!p) throw new ApiError(fallback, 502);
-  return { data: p, resume: j.resume_url ?? new URL("/api/partner/resume", j.playback_url).toString() };
+  if (!res.ok || !j.playlist_url) throw new ApiError(j.message ?? "The room couldn’t open. Try again in a moment.", res.status);
+  return { playlistUrl: j.playlist_url, qualities: (j.qualities ?? []).map((q) => ({ label: q.label, url: q.playlist_url })) };
 }
 
-const SEAT = "avn.room.seat2";
+const SEAT = "avn.room.seat3";
 const seat = {
-  get: (show: string): { mode: Mode; resume?: string } | null => {
+  get: (show: string): { show: string } | null => {
     try {
-      const v = JSON.parse(sessionStorage.getItem(SEAT) ?? "null") as { show: string; mode: Mode; resume?: string } | null;
+      const v = JSON.parse(sessionStorage.getItem(SEAT) ?? "null") as { show: string } | null;
       return v?.show === show ? v : null;
     } catch {
       return null;
     }
   },
-  set: (v: { show: string; mode: Mode; resume?: string } | null) => {
+  set: (v: { show: string } | null) => {
     try {
       if (v) sessionStorage.setItem(SEAT, JSON.stringify(v));
       else sessionStorage.removeItem(SEAT);
@@ -191,60 +184,46 @@ export default function WatchRoomPage() {
 /* ---------- the screen ---------- */
 
 function Screen({ show, title, live, startsAt, now }: { show: string; title: string; live: boolean; startsAt: string; now: number }) {
-  const [playback, setPlayback] = useState<{ data: Playback; mode: Mode; resume?: string } | null>(null);
+  const [playback, setPlayback] = useState<Playback | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const tried = useRef(false);
 
-  const enterRoom = useCallback(
-    async (mode: Mode = "proxy"): Promise<void> => {
-      setBusy(true);
-      setProblem(null);
-      try {
-        const p = await openSession(show, mode);
-        seat.set({ show, mode, resume: p.resume });
-        setPlayback({ ...p, mode });
-      } catch (e) {
-        if (mode === "proxy" && !(e instanceof ApiError && (e.status === 402 || e.status === 429))) return enterRoom("direct");
-        setProblem(e instanceof Error ? e.message : String(e));
-        setPlayback(null);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [show],
-  );
+  const enterRoom = useCallback(async (): Promise<void> => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const p = await openSession(show);
+      seat.set({ show });
+      setPlayback(p);
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : String(e));
+      setPlayback(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [show]);
 
-  // Back after a reload: continue the same viewer session; or walk straight in once the show is on.
+  // Back after a reload, or the show is on: walk straight in (the same viewer isn't counted twice).
   useEffect(() => {
     if (tried.current) return;
-    const was = seat.get(show);
-    if (was?.mode === "direct" && was.resume) {
+    if (seat.get(show) || live) {
       tried.current = true;
-      resumePlayback(was.resume).then((p) => (p ? setPlayback({ data: p, mode: "direct", resume: was.resume }) : enterRoom()));
-    } else if (was || live) {
-      tried.current = true;
-      void enterRoom(was?.mode ?? "proxy");
+      void enterRoom();
     }
   }, [show, live, enterRoom]);
 
-  const latest = useRef(playback);
-  latest.current = playback;
   const fatal = useCallback(() => {
-    const p = latest.current;
+    seat.set(null);
     setPlayback(null);
-    if (p?.mode === "proxy") void enterRoom("direct");
-    else {
-      seat.set(null);
-      setProblem("The show isn’t coming through right now. Try entering again in a moment.");
-    }
-  }, [enterRoom]);
+    setProblem("The show isn’t coming through right now. Try entering again in a moment.");
+  }, []);
   const ended = useCallback(() => {
     seat.set(null);
     setPlayback(null);
   }, []);
 
-  if (playback) return <TheaterPlayer key={playback.mode} playback={playback.data} resumeUrl={playback.resume} title={title} onEnded={ended} onFatal={fatal} />;
+  if (playback) return <TheaterPlayer playback={playback} title={title} onEnded={ended} onFatal={fatal} />;
 
   const c = formatCountdown(Date.parse(startsAt) - now);
   return (

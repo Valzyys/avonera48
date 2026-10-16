@@ -69,12 +69,12 @@ describe("dashboard shows", () => {
 describe("show banner map", () => {
   it("uses the mapped banner first, matching titles loosely", async () => {
     const { bannerFor } = await import("@/features/members/showImages");
-    expect(bannerFor("PASSION 200%")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/y2g3dgukgk8ohxghfxv8lyju.jpg");
-    expect(bannerFor("ITADAKI♥LOVE")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
-    expect(bannerFor("ITADAKI🤍LOVE")).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
+    expect(bannerFor("PASSION 200%")).toBe("/media/cdn/jkt48/theater/uploads/y2g3dgukgk8ohxghfxv8lyju.jpg");
+    expect(bannerFor("ITADAKI♥LOVE")).toBe("/media/cdn/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
+    expect(bannerFor("ITADAKI🤍LOVE")).toBe("/media/cdn/jkt48/theater/uploads/cq0m6aj6ajj3efolbqtlur0d.jpg");
     expect(bannerFor("Sambil Menggandeng Erat Tanganku")).toContain("zjdka1gtuuoc5gx9kkco");
     expect(bannerFor("Unknown Show")).toBeUndefined();
     const [s] = toDashShows([stage({ title: "Pajama Drive", banner: "/media/api/img/i/x.jpg" })], [scheduled({})]);
-    expect(s.bannerUrl).toBe("https://img.jkt48connect.com/jkt48/theater/uploads/ud3mb6r76obaftx4snzy.jpg");
+    expect(s.bannerUrl).toBe("/media/cdn/jkt48/theater/uploads/ud3mb6r76obaftx4snzy.jpg");
   });
 });

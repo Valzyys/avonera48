@@ -10,6 +10,10 @@
  * Optional:
  *   PARTNER_API_BASE   base URL for the signed calls (default: the upstream
  *                      origin), e.g. a fixed-IP relay that forwards them.
+ *   PARTNER_MEDIA_BASE base URL the room's playback, playlists and segments
+ *                      are fetched through (default: PARTNER_API_BASE). The
+ *                      partner binds a viewer session to the network that
+ *                      opened it, so this should be a fixed-IP relay too.
  *
  * Signing: subkey = HMAC(secret, "YYYY-MM-DD|keyId|serverIp") per UTC day,
  * signature = HMAC(subkey bytes, "ts:nonce:METHOD:path:sha256(body)").
@@ -20,6 +24,7 @@ export interface PartnerEnv {
   PARTNER_SECRET?: string;
   PARTNER_SERVER_IP?: string;
   PARTNER_API_BASE?: string;
+  PARTNER_MEDIA_BASE?: string;
 }
 
 const UPSTREAM = "https://jkt48connect.com";
