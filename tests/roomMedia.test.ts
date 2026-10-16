@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 // Exercise the complete exchange: redirects must not leave the fixed-IP relay.
 import { afterEach, beforeEach, vi } from "vitest";
 import { openProxied, roomMedia } from "../worker/roomMedia";
+import { mediaUrls } from "../worker/mediaUrls";
 
 const env = { PARTNER_SECRET: "test-secret", PARTNER_API_BASE: "https://relay.example" };
 const playback = "https://partner.example/api/partner/p/one-time";
@@ -37,7 +38,14 @@ describe("relay playback exchange", () => {
     const url = new URL(opened.playlist_url, "https://site.example");
     const media = await roomMedia(new Request(url), env, kv, url);
     expect(media.status).toBe(200);
-    expect(await media.text()).toContain("/api/room/media?");
+    const manifest = await media.text();
+    expect(manifest).toContain("/api/room/media?");
+    expect(manifest).not.toContain("partner.example");
+    expect(decodeURIComponent(manifest)).not.toContain("partner.example");
+    expect(JSON.stringify(opened)).not.toContain("partner.example");
+    const segment = new URL(manifest.split("\n")[1], "https://site.example");
+    const codec = await mediaUrls(env.PARTNER_SECRET, "viewer");
+    expect(await codec.open(segment.searchParams.get("r")!)).toBe("https://partner.example/api/partner/s/segment.ts");
     expect(fetchMock.mock.calls[2][0]).toBe("https://relay.example/api/partner/s/main");
     expect(fetchMock.mock.calls[2][1].headers.get("X-Play-Key")).toBe("private-key");
     expect(fetchMock.mock.calls[2][1].headers.get("cookie")).toBe("viewer=bound");
@@ -48,7 +56,10 @@ describe("relay playback exchange", () => {
       .mockResolvedValueOnce(Response.json({ ok: true, playlist_url: "../s/main", play_header_name: "X-Play-Key", play_header_value: "key" }));
     const opened = await openProxied({ ...env, PARTNER_MEDIA_BASE: "https://relay.example/forward" }, kv, "viewer", playback, null, "agent");
     expect(fetchMock.mock.calls[1][0]).toBe("https://relay.example/forward/api/partner/p/open");
-    expect(new URL(opened.playlist_url, "https://site.example").searchParams.get("u")).toBe(main);
+    const url = new URL(opened.playlist_url, "https://site.example");
+    expect(url.searchParams.has("u")).toBe(false);
+    const codec = await mediaUrls(env.PARTNER_SECRET, "viewer");
+    expect(await codec.open(url.searchParams.get("r")!)).toBe(main);
   });
 
   it("resumes a refused media session through the relay with rotated credentials", async () => {
@@ -66,6 +77,19 @@ describe("relay playback exchange", () => {
     expect(fetchMock.mock.calls[4][1].headers.get("X-Play-Key")).toBe("renewed-key");
     expect(fetchMock.mock.calls[4][1].headers.get("cookie")).toBe("viewer=renewed");
     expect(fetchMock.mock.calls[4][1].headers.get("range")).toBe("bytes=0-6");
+  });
+
+  it("rejects modified encrypted references and plain upstream URLs before fetching", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    const url = new URL(opened.playlist_url, "https://site.example");
+    const reference = url.searchParams.get("r")!;
+    url.searchParams.set("r", (reference[0] === "A" ? "B" : "A") + reference.slice(1));
+    expect((await roomMedia(new Request(url), env, kv, url)).status).toBe(403);
+    url.searchParams.delete("r");
+    url.searchParams.set("u", main);
+    expect((await roomMedia(new Request(url), env, kv, url)).status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("reports an HTML relay fallback and missing playback route clearly", async () => {

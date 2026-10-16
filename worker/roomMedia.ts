@@ -18,7 +18,8 @@
  * playback context is read from the edge cache, falling back to KV.
  */
 
-import { rewritePlaylist } from "./hls";
+import { rewritePlaylistAsync } from "./hls";
+import { mediaUrls } from "./mediaUrls";
 import type { PartnerEnv } from "./partner";
 
 export interface MediaCtx {
@@ -161,7 +162,13 @@ export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string,
   const { response: res, cookie } = opened;
   if (!res.ok) {
     // Never log the body or full URL: either can contain playback credentials.
-    console.warn("[room] playback refused", res.status);
+    console.warn("[room] playback refused", {
+      status: res.status,
+      // Only accept a three-digit status, never arbitrary upstream header text.
+      upstreamStatus: /^[1-5]\d{2}$/.test(res.headers.get("x-avonera-upstream-status") ?? "")
+        ? Number(res.headers.get("x-avonera-upstream-status")) : null,
+      throughRelay: !!via,
+    });
     if (res.status === 404) throw new PlaybackError("playback_route_missing", "The video service is temporarily unavailable. Please try again later.");
     throw new PlaybackError("playback_refused", "The video service refused playback. Please try again later.");
   }
@@ -176,8 +183,12 @@ export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string,
   const exp = Math.floor(Date.now() / 1000) + TTL;
   await saveCtx(kv, uid, { origin, via, headerName: j.play_header_name, headerValue: j.play_header_value, cookie, ua, resume: resumeUrl, exp });
   const token = await makeToken(env, uid, exp);
-  const wrap = (u: string) => `/api/room/media?t=${token}&u=${encodeURIComponent(u)}`;
-  return { playlist_url: wrap(playlist.href), qualities: (j.qualities ?? []).map((q) => ({ label: q.label, playlist_url: wrap(new URL(q.playlist_url, opened.url).href) })) };
+  const codec = await mediaUrls(env.PARTNER_SECRET!, uid);
+  const wrap = async (u: string) => `/api/room/media?t=${token}&r=${await codec.seal(u)}`;
+  return {
+    playlist_url: await wrap(playlist.href),
+    qualities: await Promise.all((j.qualities ?? []).map(async (q) => ({ label: q.label, playlist_url: await wrap(new URL(q.playlist_url, opened.url).href) }))),
+  };
 }
 
 async function upstream(ctx: MediaCtx, url: string, request: Request) {
@@ -188,12 +199,18 @@ async function upstream(ctx: MediaCtx, url: string, request: Request) {
   return relayFetch(ctx.via, url, headers, ctx.cookie);
 }
 
-/** GET /api/room/media?t=<token>&u=<upstream url> */
+/** GET /api/room/media?t=<token>&r=<encrypted media reference> */
 export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespace, url: URL): Promise<Response> {
   const uid = await readToken(env, url.searchParams.get("t") ?? "");
   if (!uid) return new Response("Forbidden", { status: 403 });
   const ctx = await loadCtx(kv, uid);
-  const target = url.searchParams.get("u") ?? "";
+  const codec = await mediaUrls(env.PARTNER_SECRET!, uid);
+  let target: string;
+  try {
+    target = await codec.open(url.searchParams.get("r") ?? "");
+  } catch {
+    return new Response("Forbidden", { status: 403 });
+  }
   if (!ctx || !target.startsWith(`${ctx.origin}/`)) return new Response("Forbidden", { status: 403 });
 
   let res: Response;
@@ -242,7 +259,7 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
     const head = new TextDecoder().decode(bytes.slice(0, 16)).replace(/^\uFEFF/, "").trimStart();
     if (head.startsWith("#EXTM3U")) {
       const token = url.searchParams.get("t")!;
-      const body = rewritePlaylist(new TextDecoder().decode(bytes), mediaUrl, (abs) => `/api/room/media?t=${token}&u=${encodeURIComponent(abs)}`);
+      const body = await rewritePlaylistAsync(new TextDecoder().decode(bytes), mediaUrl, async (abs) => `/api/room/media?t=${token}&r=${await codec.seal(abs)}`);
       return new Response(body, { headers: { "content-type": "application/vnd.apple.mpegurl", "cache-control": "no-store" } });
     }
     return new Response(bytes, { status: res.status, headers: { "content-type": type || "application/octet-stream", "cache-control": "private, max-age=30" } });
