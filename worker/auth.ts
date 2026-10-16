@@ -11,7 +11,7 @@
  *   GET  /api/avatar/:uid     a member's photo
  *
  *   GET  /api/room            (signed in) shows the room can open now
- *   POST /api/room/session    (signed in) { show, proxy } → playback for a show the viewer may watch
+ *   POST /api/room/session    (signed in) { show } → same-origin playback for a show the viewer may watch
  *   GET  /api/room/media      proxied playlists and segments (worker/roomMedia.ts)
  *   /api/room/:show/comments… live chat (worker/comments.ts)
  *   /api/shop/…               tickets, memberships, payments (worker/shop.ts)
@@ -249,7 +249,6 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
   if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
   const data = await body(request);
   const show = str(data.show ?? data.show_slug, 80).toLowerCase();
-  const proxy = data.proxy === true;
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(show)) return fail(400, "invalid", "Choose a show.");
 
   // With the shop on, a show needs a ticket or a membership (admins may always watch),
@@ -270,13 +269,11 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
     return fail(status, (r.data.code ?? "upstream_error").toLowerCase(), message);
   }
   const resume = typeof r.data.resume_url === "string" && /^https?:\/\//.test(r.data.resume_url) ? r.data.resume_url : null;
-  if (proxy) {
-    // Proxy mode: open the playback URL here and hand the player same-origin URLs.
-    const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
-    if (!opened) return fail(502, "playback_refused", "The room couldn’t open. Try again in a moment.");
-    return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
-  }
-  return reply({ ok: true, playback_url: r.data.playback_url, resume_url: resume, expires_in: r.data.expires_in, max_resolution: r.data.max_resolution ?? null });
+  // Always through this site: the server opens the playback URL and hands the
+  // player same-origin URLs, so the partner's address never reaches the browser.
+  const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
+  if (!opened) return fail(502, "playback_refused", "The room couldn’t open. Try again in a moment.");
+  return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
 }
 
 /* ---------- router ---------- */

@@ -25,6 +25,7 @@ export interface Env extends AuthEnv {
 }
 
 const UPSTREAM = "https://jkt48connect.com";
+const IMG_CDN = "https://img.jkt48connect.com";
 const apiKey = (env: Env) => env.DATA_API_KEY || env.JKT48CONNECT_API_KEY;
 
 /** Upstream image URLs (plain or JSON-escaped) → /media/… on this origin. */
@@ -99,6 +100,9 @@ async function media(request: Request, ctx: ExecutionContext, url: URL): Promise
   let ttl = 31536000;
   if (/^(api\/img|img)\/[A-Za-z0-9/_.-]{1,300}$/.test(path)) {
     upstream = `${UPSTREAM}/${path}`;
+  } else if (/^cdn\/[A-Za-z0-9/_.-]{1,300}$/.test(path)) {
+    // /media/cdn/<path>: the image CDN the theater banners live on.
+    upstream = `${IMG_CDN}/${path.slice(4)}`;
   } else {
     // /media/x/<host>/<path>: images embedded in official news articles. The
     // official site only serves them to its own pages, so ask as jkt48.com.

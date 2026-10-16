@@ -83,6 +83,10 @@ export function TheaterPlayer({
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [generation, setGeneration] = useState(0);
   const hlsRef = useRef<Hls | null>(null);
+  /** Renditions inside the playlist itself (hls.levels), best first; empty for a single rendition. */
+  const [levels, setLevels] = useState<{ index: number; label: string }[]>([]);
+  /** The rendition Auto is playing right now, e.g. "720p". */
+  const [autoNow, setAutoNow] = useState<string | null>(null);
 
   useEffect(() => {
     key.current = playback.headerValue;
@@ -130,9 +134,22 @@ export function TheaterPlayer({
       });
       hls = h;
       hlsRef.current = h;
-      h.on(HlsCtor.Events.MANIFEST_PARSED, () => {
+      h.on(HlsCtor.Events.MANIFEST_PARSED, (_e, data) => {
+        // One menu entry per height (the best bitrate of each), highest first.
+        const best = new Map<string, { index: number; bitrate: number }>();
+        data.levels.forEach((l, index) => {
+          const label = l.height ? `${l.height}p` : `${Math.round(l.bitrate / 1000)} kbps`;
+          const had = best.get(label);
+          if (!had || l.bitrate > had.bitrate) best.set(label, { index, bitrate: l.bitrate });
+        });
+        const list = [...best.entries()].sort((a, b) => parseInt(b[0]) - parseInt(a[0]) || b[1].bitrate - a[1].bitrate).map(([label, v]) => ({ index: v.index, label }));
+        setLevels(list.length > 1 ? list : []);
         setState("ready");
         el.play().catch(() => undefined);
+      });
+      h.on(HlsCtor.Events.LEVEL_SWITCHED, (_e, d) => {
+        const l = h.levels[d.level];
+        setAutoNow(l?.height ? `${l.height}p` : null);
       });
       h.on(HlsCtor.Events.FRAG_LOADED, () => {
         netFails = 0;
@@ -327,6 +344,22 @@ export function TheaterPlayer({
     else setSource(url);
   };
 
+  /** Switch rendition inside the playing playlist: no reload, no new session. */
+  const pickLevel = (label: string, index: number) => {
+    setQuality(label);
+    setMenu(false);
+    const h = hlsRef.current;
+    if (h) h.currentLevel = index;
+  };
+
+  // The menu: the playlist's own renditions when it has several, else the
+  // fixed-quality playlists the session listed.
+  const options: { label: string; run: () => void }[] = levels.length
+    ? [{ label: "Auto", run: () => pickLevel("Auto", -1) }, ...levels.map((l) => ({ label: l.label, run: () => pickLevel(l.label, l.index) }))]
+    : playback.qualities.length
+      ? [{ label: "Auto", url: playback.playlistUrl }, ...playback.qualities].map((q) => ({ label: q.label, run: () => pick(q.label, q.url) }))
+      : [];
+
   const level = muted ? 0 : volume;
 
   return (
@@ -425,7 +458,7 @@ export function TheaterPlayer({
             </button>
           </div>
           <div className="player__group">
-            {playback.qualities.length > 0 && (
+            {options.length > 0 && (
               <span className="player__quality">
                 <button type="button" className="player__btn player__btn--wide" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-haspopup="menu" aria-label={`Quality: ${quality}`} data-tip={menu ? undefined : "Quality"}>
                   <Icon name="settings" size={19} strokeWidth={1.8} className={cx("player__gear", menu && "is-open")} />
@@ -434,9 +467,9 @@ export function TheaterPlayer({
                 {menu && (
                   <span className="player__menu" role="menu">
                     <span className="player__menu-head">Quality</span>
-                    {[{ label: "Auto", url: playback.playlistUrl }, ...playback.qualities].map((q) => (
-                      <button key={q.label} type="button" role="menuitemradio" aria-checked={quality === q.label} onClick={() => pick(q.label, q.url)}>
-                        {q.label}
+                    {options.map((q) => (
+                      <button key={q.label} type="button" role="menuitemradio" aria-checked={quality === q.label} onClick={q.run}>
+                        {q.label === "Auto" && levels.length && autoNow ? `Auto · ${autoNow}` : q.label}
                         {quality === q.label && <Icon name="check" size={16} strokeWidth={2.2} />}
                       </button>
                     ))}

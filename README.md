@@ -39,6 +39,8 @@ npx wrangler secret put PARTNER_SERVER_IP   # the server IP registered with the 
 
 The partner checks that signed calls come from the registered IP. Cloudflare Workers and Pages have no fixed outbound IP. If the partner rejects calls with `SIGNATURE_REJECTED`, run the signed calls through a relay that has the registered IP, and point `PARTNER_API_BASE` at that relay.
 
+The room's video always goes through this site: the server opens the partner playback itself and the player only loads `/api/room/media/…`, so the partner's address never appears in the browser. The partner binds a viewer session to the network that opened it, and Workers/Pages change outbound IP between requests, so the playback, playlists and segments must also go through the fixed-IP relay. They use `PARTNER_MEDIA_BASE` (optional; defaults to `PARTNER_API_BASE`). The relay has to forward every path (including `/api/partner/p/…`, `/api/partner/s/…` and `/api/partner/resume`) with its headers (`X-Play-Key`, `Cookie`, `Range`) to the partner and pass back `Set-Cookie`.
+
 ## Tickets, memberships and payments
 
 Shows are sold. A viewer can watch a show with a ticket for that show or with an active membership. Admins can always watch.

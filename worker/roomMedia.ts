@@ -8,6 +8,11 @@
  * play header never leaves the server. A refused request (401/403) is
  * resumed server side once, as the partner docs describe.
  *
+ * The partner binds a viewer session to the network that opened it, so when
+ * PARTNER_MEDIA_BASE (or PARTNER_API_BASE) points at a fixed-IP relay, every
+ * upstream request — playback, resume, playlists, segments — goes through it.
+ * The browser never sees the partner's address either way.
+ *
  * Each media URL carries a short HMAC token (viewer id + expiry), so the
  * hot path (one request per segment) needs no session lookup; the viewer's
  * playback context is read from the edge cache, falling back to KV.
@@ -17,7 +22,10 @@ import { rewritePlaylist } from "./hls";
 import type { PartnerEnv } from "./partner";
 
 export interface MediaCtx {
+  /** The partner origin the playlists name (what /api/room/media accepts). */
   origin: string;
+  /** Where requests actually go: a relay base, or null to call the origin directly. */
+  via?: string | null;
   headerName: string;
   headerValue: string;
   cookie: string;
@@ -82,6 +90,15 @@ function mergeCookies(jar: string, res: Response) {
   return [...all.values()].join("; ");
 }
 
+const relayOf = (env: PartnerEnv) => (env.PARTNER_MEDIA_BASE || env.PARTNER_API_BASE || "").replace(/\/+$/, "") || null;
+
+/** An upstream URL as fetched: through the relay when there is one. */
+function routed(via: string | null | undefined, u: string) {
+  if (!via) return u;
+  const url = new URL(u);
+  return `${via}${url.pathname}${url.search}`;
+}
+
 interface PlaybackJson {
   ok?: boolean;
   playlist_url?: string;
@@ -98,18 +115,23 @@ interface PlaybackJson {
  * player, or null when the partner refuses.
  */
 export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string, playbackUrl: string, resumeUrl: string | null, ua: string) {
+  const via = relayOf(env);
   let res: Response;
   try {
-    res = await fetch(playbackUrl, { headers: { accept: "application/json", "user-agent": ua } });
-  } catch {
+    res = await fetch(routed(via, playbackUrl), { headers: { accept: "application/json", "user-agent": ua } });
+  } catch (e) {
+    console.warn("[room] playback unreachable", String(e));
     return null;
   }
   const j = (await res.json().catch(() => ({}))) as PlaybackJson;
   const main = j.auto_playlist_url ?? j.playlist_url;
-  if (!res.ok || !j.ok || !main || !j.play_header_name || !j.play_header_value) return null;
+  if (!res.ok || !j.ok || !main || !j.play_header_name || !j.play_header_value) {
+    console.warn("[room] playback refused", res.status, j.code ?? "", j.message ?? "");
+    return null;
+  }
   const origin = new URL(main).origin;
   const exp = Math.floor(Date.now() / 1000) + TTL;
-  await saveCtx(kv, uid, { origin, headerName: j.play_header_name, headerValue: j.play_header_value, cookie: mergeCookies("", res), ua, resume: resumeUrl, exp });
+  await saveCtx(kv, uid, { origin, via, headerName: j.play_header_name, headerValue: j.play_header_value, cookie: mergeCookies("", res), ua, resume: resumeUrl, exp });
   const token = await makeToken(env, uid, exp);
   const wrap = (u: string) => `/api/room/media?t=${token}&u=${encodeURIComponent(u)}`;
   return { playlist_url: wrap(main), qualities: (j.qualities ?? []).map((q) => ({ label: q.label, playlist_url: wrap(q.playlist_url) })) };
@@ -120,7 +142,7 @@ async function upstream(ctx: MediaCtx, url: string, request: Request) {
   if (ctx.cookie) headers.cookie = ctx.cookie;
   const range = request.headers.get("range");
   if (range) headers.range = range;
-  return fetch(url, { headers });
+  return fetch(routed(ctx.via, url), { headers });
 }
 
 /** GET /api/room/media?t=<token>&u=<upstream url> */
@@ -136,7 +158,7 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
     res = await upstream(ctx, target, request);
     if ((res.status === 401 || res.status === 403) && ctx.resume) {
       // Session refused: resume once (new play header), then retry.
-      const r = await fetch(ctx.resume, { headers: { accept: "application/json", "user-agent": ctx.ua, ...(ctx.cookie ? { cookie: ctx.cookie } : {}) } });
+      const r = await fetch(routed(ctx.via, ctx.resume), { headers: { accept: "application/json", "user-agent": ctx.ua, ...(ctx.cookie ? { cookie: ctx.cookie } : {}) } });
       const j = (await r.json().catch(() => ({}))) as PlaybackJson;
       if (r.ok && j.ok && j.play_header_value) {
         ctx.headerValue = j.play_header_value;
@@ -149,7 +171,10 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
   } catch {
     return new Response("Upstream unreachable", { status: 502 });
   }
-  if (!res.ok && res.status !== 206) return new Response(null, { status: res.status === 404 ? 404 : res.status >= 500 ? 502 : res.status });
+  if (!res.ok && res.status !== 206) {
+    if (res.status === 401 || res.status === 403) console.warn("[room] media refused", res.status);
+    return new Response(null, { status: res.status === 404 ? 404 : res.status >= 500 ? 502 : res.status });
+  }
 
   const type = res.headers.get("content-type") ?? "";
   // Media URLs are opaque (/api/partner/s/<id>), so sniff anything that isn't
