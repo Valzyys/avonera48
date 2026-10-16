@@ -41,6 +41,10 @@ The partner checks that signed calls come from the registered IP. Cloudflare Wor
 
 The room's video always goes through this site: the server opens the partner playback itself and the player only loads `/api/room/media/…`, so the partner's address never appears in the browser. The partner binds a viewer session to the network that opened it, and Workers/Pages change outbound IP between requests, so the playback, playlists and segments must also go through the fixed-IP relay. They use `PARTNER_MEDIA_BASE` (optional; defaults to `PARTNER_API_BASE`). The relay has to forward every path (including `/api/partner/p/…`, `/api/partner/s/…` and `/api/partner/resume`) with its headers (`X-Play-Key`, `Cookie`, `Range`) to the partner and pass back `Set-Cookie`.
 
+Playback redirects are followed explicitly through the same relay, retaining session cookies. The relay must pass redirects and `Set-Cookie` back unchanged; it must not follow redirects itself or serve an HTML fallback for `/api/partner/*`. Forward the query string, `Accept`, `User-Agent`, `X-Play-Key`, `Cookie` and `Range` unchanged. Both API and media relay settings must use the registered outbound IP.
+
+If opening a room fails, `/api/room/session` distinguishes `playback_route_missing` (404 from the relay), `playback_invalid_response` (HTML or incomplete JSON), `playback_refused` (HTTP rejection) and `playback_unreachable` (network or redirect failure). Check the relay's playback routes and Worker logs without sharing playback URLs, cookies or signing secrets.
+
 ## Tickets, memberships and payments
 
 Shows are sold. A viewer can watch a show with a ticket for that show or with an active membership. Admins can always watch.

@@ -39,7 +39,7 @@ import { handleIntegration, handleLink, type LinkEnv } from "./link";
 import { ensureSchema } from "./db";
 import { body, enc, fail, hex, randomHex, reply, sameOrigin, sha256, str } from "./http";
 import { partnerCall, partnerReady, type PartnerEnv, type PartnerSession, type PartnerShow } from "./partner";
-import { openProxied, roomMedia } from "./roomMedia";
+import { PlaybackError, openProxied, roomMedia } from "./roomMedia";
 import { accessTo, handleShop, isAdmin, type ShopEnv } from "./shop";
 
 export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv {
@@ -290,9 +290,16 @@ async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user
   const resume = typeof r.data.resume_url === "string" && /^https?:\/\//.test(r.data.resume_url) ? r.data.resume_url : null;
   // Always through this site: the server opens the playback URL and hands the
   // player same-origin URLs, so the partner's address never reaches the browser.
-  const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
-  if (!opened) return fail(502, "playback_refused", "The room couldn’t open. Try again in a moment.");
-  return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
+  try {
+    const opened = await openProxied(env, kv, user.id, r.data.playback_url, resume, request.headers.get("user-agent") ?? "Mozilla/5.0");
+    return reply({ ok: true, proxied: true, ...opened, max_resolution: r.data.max_resolution ?? null });
+  } catch (error) {
+    if (error instanceof PlaybackError) {
+      console.warn("[room] playback failed", error.code);
+      return fail(502, error.code, error.message);
+    }
+    throw error;
+  }
 }
 
 /* ---------- admins and verified accounts ---------- */

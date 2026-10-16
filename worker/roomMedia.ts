@@ -99,6 +99,42 @@ function routed(via: string | null | undefined, u: string) {
   return `${via}${url.pathname}${url.search}`;
 }
 
+/** Follow partner redirects through the same relay, retaining session cookies. */
+async function relayFetch(via: string | null | undefined, target: string, headers: HeadersInit, cookie = "") {
+  let current = new URL(target);
+  const origin = current.origin;
+  let jar = cookie;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    const nextHeaders = new Headers(headers);
+    if (jar) nextHeaders.set("cookie", jar);
+    const response = await fetch(routed(via, current.href), { headers: nextHeaders, redirect: "manual" });
+    jar = mergeCookies(jar, response);
+    if (![301, 302, 303, 307, 308].includes(response.status)) return { response, cookie: jar, url: current.href };
+    const location = response.headers.get("location");
+    await response.body?.cancel();
+    if (!location) throw new Error("Playback redirect has no location");
+    const next = new URL(location, current);
+    // Relays may rewrite Location to their own address. Keep a canonical
+    // partner URL so routing and relative playlist URLs remain consistent.
+    if (via && next.origin === new URL(via).origin) {
+      const basePath = new URL(via).pathname.replace(/\/+$/, "");
+      if (basePath && !(next.pathname === basePath || next.pathname.startsWith(`${basePath}/`))) throw new Error("Invalid relay redirect");
+      next.pathname = next.pathname.slice(basePath.length) || "/";
+      next.protocol = current.protocol;
+      next.host = current.host;
+    }
+    if (next.origin !== origin) throw new Error("Cross-origin playback redirect refused");
+    current = next;
+  }
+  throw new Error("Too many playback redirects");
+}
+
+export class PlaybackError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+  }
+}
+
 interface PlaybackJson {
   ok?: boolean;
   playlist_url?: string;
@@ -112,29 +148,36 @@ interface PlaybackJson {
 
 /**
  * Opens a playback URL server side and returns same-origin URLs for the
- * player, or null when the partner refuses.
+ * player, or a safe error when the partner refuses.
  */
 export async function openProxied(env: PartnerEnv, kv: KVNamespace, uid: string, playbackUrl: string, resumeUrl: string | null, ua: string) {
   const via = relayOf(env);
-  let res: Response;
+  let opened: Awaited<ReturnType<typeof relayFetch>>;
   try {
-    res = await fetch(routed(via, playbackUrl), { headers: { accept: "application/json", "user-agent": ua } });
-  } catch (e) {
-    console.warn("[room] playback unreachable", String(e));
-    return null;
+    opened = await relayFetch(via, playbackUrl, { accept: "application/json", "user-agent": ua });
+  } catch {
+    throw new PlaybackError("playback_unreachable", "The video service could not be reached. Try again in a moment.");
   }
-  const j = (await res.json().catch(() => ({}))) as PlaybackJson;
-  const main = j.auto_playlist_url ?? j.playlist_url;
-  if (!res.ok || !j.ok || !main || !j.play_header_name || !j.play_header_value) {
-    console.warn("[room] playback refused", res.status, j.code ?? "", j.message ?? "");
-    return null;
+  const { response: res, cookie } = opened;
+  if (!res.ok) {
+    // Never log the body or full URL: either can contain playback credentials.
+    console.warn("[room] playback refused", res.status);
+    if (res.status === 404) throw new PlaybackError("playback_route_missing", "The video service is temporarily unavailable. Please try again later.");
+    throw new PlaybackError("playback_refused", "The video service refused playback. Please try again later.");
   }
-  const origin = new URL(main).origin;
+  const j = (await res.json().catch(() => null)) as PlaybackJson | null;
+  if (!j) throw new PlaybackError("playback_invalid_response", "The video service returned an invalid response. Please try again later.");
+  const main = j.auto_playlist_url || j.playlist_url;
+  if (!j.ok || !main || !j.play_header_name || !j.play_header_value) {
+    throw new PlaybackError("playback_invalid_response", "The video service could not open playback. Please try again later.");
+  }
+  const playlist = new URL(main, opened.url);
+  const origin = playlist.origin;
   const exp = Math.floor(Date.now() / 1000) + TTL;
-  await saveCtx(kv, uid, { origin, via, headerName: j.play_header_name, headerValue: j.play_header_value, cookie: mergeCookies("", res), ua, resume: resumeUrl, exp });
+  await saveCtx(kv, uid, { origin, via, headerName: j.play_header_name, headerValue: j.play_header_value, cookie, ua, resume: resumeUrl, exp });
   const token = await makeToken(env, uid, exp);
   const wrap = (u: string) => `/api/room/media?t=${token}&u=${encodeURIComponent(u)}`;
-  return { playlist_url: wrap(main), qualities: (j.qualities ?? []).map((q) => ({ label: q.label, playlist_url: wrap(q.playlist_url) })) };
+  return { playlist_url: wrap(playlist.href), qualities: (j.qualities ?? []).map((q) => ({ label: q.label, playlist_url: wrap(new URL(q.playlist_url, opened.url).href) })) };
 }
 
 async function upstream(ctx: MediaCtx, url: string, request: Request) {
@@ -142,7 +185,7 @@ async function upstream(ctx: MediaCtx, url: string, request: Request) {
   if (ctx.cookie) headers.cookie = ctx.cookie;
   const range = request.headers.get("range");
   if (range) headers.range = range;
-  return fetch(routed(ctx.via, url), { headers });
+  return relayFetch(ctx.via, url, headers, ctx.cookie);
 }
 
 /** GET /api/room/media?t=<token>&u=<upstream url> */
@@ -154,18 +197,33 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
   if (!ctx || !target.startsWith(`${ctx.origin}/`)) return new Response("Forbidden", { status: 403 });
 
   let res: Response;
+  let mediaUrl = target;
   try {
-    res = await upstream(ctx, target, request);
+    let fetched = await upstream(ctx, target, request);
+    res = fetched.response;
+    mediaUrl = fetched.url;
+    if (fetched.cookie !== ctx.cookie) {
+      ctx.cookie = fetched.cookie;
+      await saveCtx(kv, uid, ctx);
+    }
     if ((res.status === 401 || res.status === 403) && ctx.resume) {
       // Session refused: resume once (new play header), then retry.
-      const r = await fetch(routed(ctx.via, ctx.resume), { headers: { accept: "application/json", "user-agent": ctx.ua, ...(ctx.cookie ? { cookie: ctx.cookie } : {}) } });
+      await res.body?.cancel();
+      const resumed = await relayFetch(ctx.via, ctx.resume, { accept: "application/json", "user-agent": ctx.ua }, ctx.cookie);
+      const r = resumed.response;
       const j = (await r.json().catch(() => ({}))) as PlaybackJson;
       if (r.ok && j.ok && j.play_header_value) {
         ctx.headerValue = j.play_header_value;
         ctx.headerName = j.play_header_name ?? ctx.headerName;
-        ctx.cookie = mergeCookies(ctx.cookie, r);
+        ctx.cookie = resumed.cookie;
         await saveCtx(kv, uid, ctx);
-        res = await upstream(ctx, target, request);
+        fetched = await upstream(ctx, target, request);
+        res = fetched.response;
+        mediaUrl = fetched.url;
+        if (fetched.cookie !== ctx.cookie) {
+          ctx.cookie = fetched.cookie;
+          await saveCtx(kv, uid, ctx);
+        }
       }
     }
   } catch {
@@ -184,7 +242,7 @@ export async function roomMedia(request: Request, env: PartnerEnv, kv: KVNamespa
     const head = new TextDecoder().decode(bytes.slice(0, 16)).replace(/^\uFEFF/, "").trimStart();
     if (head.startsWith("#EXTM3U")) {
       const token = url.searchParams.get("t")!;
-      const body = rewritePlaylist(new TextDecoder().decode(bytes), target, (abs) => `/api/room/media?t=${token}&u=${encodeURIComponent(abs)}`);
+      const body = rewritePlaylist(new TextDecoder().decode(bytes), mediaUrl, (abs) => `/api/room/media?t=${token}&u=${encodeURIComponent(abs)}`);
       return new Response(body, { headers: { "content-type": "application/vnd.apple.mpegurl", "cache-control": "no-store" } });
     }
     return new Response(bytes, { status: res.status, headers: { "content-type": type || "application/octet-stream", "cache-control": "private, max-age=30" } });
