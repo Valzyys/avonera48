@@ -1,5 +1,5 @@
 /**
- * Shop: theater show tickets and memberships, paid through MYPG.
+ * Shop: theater show tickets and memberships, paid by QRIS (worker/payment.ts).
  *
  *   GET  /api/shop/catalog             prices, plans, what the viewer owns
  *   GET  /api/shop/shows               the shows on sale (IDN Plus listing)
@@ -16,7 +16,7 @@
 
 import { ensureSchema, getSetting } from "./db";
 import { body, fail, randomId, reply, str } from "./http";
-import { cancelPayment, checkPayment, createPayment, gatewayTime, paymentReady, type PaymentEnv, type PayStatus } from "./payment";
+import { cancelPayment, checkPayment, createPayment, isV2Ref, paymentReady, type PaymentEnv, type PayStatus } from "./payment";
 import { parseStageList, withArt, type StageShow, type TheaterRow } from "./stage";
 
 export interface ShopEnv extends PaymentEnv {
@@ -302,7 +302,8 @@ export const publicOrder = (o: Order) => ({
   amount: o.amount,
   pay_amount: o.pay_amount,
   status: o.status,
-  trx_id: o.trx_id,
+  // Gateway V2 shows the payer its own transaction code (kept in pay_token); MYPG its trx_id.
+  trx_id: o.trx_id && isV2Ref(o.trx_id) ? (o.pay_token ?? o.trx_id) : o.trx_id,
   qr_image: o.qr_image,
   payment_url: o.payment_url,
   expires_at: o.expires_at,
@@ -406,14 +407,14 @@ async function checkout(env: ShopEnv, db: D1Database, viewer: Viewer, request: R
     return reply({ ok: true, id, free: true });
   }
 
-  const p = await createPayment(env, amount, id);
+  const p = await createPayment(env, amount, id, { name: viewer.name, email: viewer.email, description: `Avonera48 · ${item.title}` });
   if (!p.ok || !p.data) {
     await settle(db, order, "FAILED");
     return fail(502, "gateway_error", "The payment couldn’t be started. Try again in a moment.");
   }
   await db
     .prepare("UPDATE orders SET trx_id = ?, pay_token = ?, pay_amount = ?, qr_image = ?, payment_url = ?, expires_at = ?, checked_at = ? WHERE id = ?")
-    .bind(p.data.trx_id, p.data.payment_token, p.data.amount ?? amount, p.data.qr_image, p.data.payment_url, gatewayTime(p.data.expired_at), Date.now(), id)
+    .bind(p.data.trx_id, p.data.payment_token, p.data.amount ?? amount, p.data.qr_image, p.data.payment_url, p.data.expired_at, Date.now(), id)
     .run();
   return reply({ ok: true, id });
 }
