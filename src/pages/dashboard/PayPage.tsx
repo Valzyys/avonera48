@@ -139,7 +139,7 @@ export default function PayPage() {
               </div>
               <ol className="pay-steps">
                 <li>Open any banking or e-wallet app that supports QRIS.</li>
-                <li>Scan the code above, or open the payment page on your phone.</li>
+                <li>{order.payment_url ? "Scan the code above, or open the payment page on your phone." : "Scan the code above, or save it and upload it from your gallery."}</li>
                 <li>Pay the exact amount. This page updates by itself.</li>
               </ol>
               <div className="pay-actions">

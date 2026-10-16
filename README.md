@@ -61,16 +61,14 @@ Then bind it:
 - **Worker:** already bound in `wrangler.jsonc` (`d1_databases`).
 - **Pages:** Settings → Bindings → D1 database, variable name `DB`.
 
-Payments go through MYPG (QRIS), in `worker/payment.ts`. The server polls the gateway for the payment status while the pay page is open, so no webhook is needed. Set these as secrets or variables:
+Payments are QRIS, in `worker/payment.ts`, through Gateway V2 (dynamic QRIS: the amount to pay includes a unique code). The server polls the gateway for the status while the pay page is open, so no webhook is needed. Orders made earlier through MYPG are still checked and cancelled on MYPG (V2 references start with `GIV2-`). Set these as secrets or variables:
 
-| Name | What it is |
+| Name | |
 | --- | --- |
-| `MYPG_API_KEY` | MYPG API key (secret) |
-| `ADMIN_EMAILS` | Comma-separated emails of accounts that may use `/dashboard/admin` |
+| `PAYMENT_V2_API_KEY` | Gateway V2 API key, `GIV2-…` (secret). New payments use V2 when it is set |
+| `PAYMENT_V2_URL` | Optional. Overrides `https://v5.jkt48connect.com` |
+| `MYPG_API_KEY` | Optional. The older MYPG key (secret): needed only for MYPG orders still pending, or as the gateway when no V2 key is set |
 | `MYPG_API_URL` | Optional. Overrides `https://yobasepay.net/api_my` |
-| `SHOWS_API_URL` | Optional. Overrides the IDN Plus show listing URL |
-
-Redeploy after adding bindings or secrets so the functions pick them up.
 
 ## Linking a JKT48Connect account
 
