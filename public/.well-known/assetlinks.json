@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.avonera48.mobile",
+      "sha256_cert_fingerprints": [
+        "3F:B8:C3:62:02:F2:A0:53:BB:49:E5:13:99:29:C4:69:F3:1E:18:EB:5B:13:3E:3B:CD:89:D6:D0:FC:97:42:78"
+      ]
+    }
+  }
+]
