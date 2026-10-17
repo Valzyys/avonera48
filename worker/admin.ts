@@ -233,8 +233,8 @@ export async function handleAdmin(request: Request, env: ShopEnv, kv: KVNamespac
   }
   if (method === "POST" && path === "/products") {
     const d = await body(request);
-    const slug = str(d.show_slug, 40).toLowerCase();
-    if (!/^[a-z0-9_-]{1,40}$/.test(slug)) return fail(400, "invalid", "Choose a show.");
+    const slug = str(d.show_slug, 120).toLowerCase();
+    if (!/^[a-z0-9_-]{1,120}$/.test(slug)) return fail(400, "invalid", "Choose a show.");
     const price = d.price === null || d.price === "" || d.price === undefined ? null : int(d.price, 0, 100_000_000);
     if (d.price !== null && d.price !== "" && d.price !== undefined && price == null) return fail(400, "invalid", "Enter a price in rupiah, or leave it empty for the global price.", "price");
     const stream = str(d.stream_slug, 80).trim().toLowerCase() || null;
@@ -248,7 +248,7 @@ export async function handleAdmin(request: Request, env: ShopEnv, kv: KVNamespac
       .run();
     return reply({ ok: true });
   }
-  m = /^\/products\/([a-z0-9_-]{1,40})$/.exec(path);
+  m = /^\/products\/([a-z0-9_-]{1,120})$/.exec(path);
   if (m && method === "DELETE") {
     await db.prepare("DELETE FROM products WHERE show_slug = ?").bind(m[1]).run();
     return reply({ ok: true });

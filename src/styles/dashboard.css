@@ -259,6 +259,7 @@
 .dash-main {
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
 }
 .dash-top {
@@ -2409,7 +2410,7 @@ button.tx-row:hover:not(:disabled) {
 
 @media (max-width: 1024px) {
   .dash {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .dash-side {
     display: none;
@@ -2587,11 +2588,12 @@ button.tx-row:hover:not(:disabled) {
   .dash--watch .dash-tabs {
     display: none;
   }
-  /* the room keeps a flat 59px bar so the player and chat fill the screen */
+  /* the room keeps a flat 60px bar so the player and chat fill the screen */
   .dash--watch .dash-top {
     top: 0;
+    height: 60px;
     margin: 0;
-    padding: 10px 12px;
+    padding: 0 12px;
     border-radius: 0;
     background: var(--bg);
     border-color: transparent transparent var(--line);
@@ -2608,7 +2610,7 @@ button.tx-row:hover:not(:disabled) {
     flex-direction: column;
     align-items: stretch;
     gap: 0;
-    height: calc(100dvh - 59px);
+    height: calc(100dvh - 60px);
   }
   .watch-stage {
     flex: none;

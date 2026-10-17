@@ -60,7 +60,7 @@ function stream(db: D1Database, show: string, after: number, me: string) {
 }
 
 export async function handleComments(request: Request, env: ShopEnv, viewer: Viewer & { avatar?: string | null }, url: URL, sameOriginOk: boolean): Promise<Response | null> {
-  const m = /^\/api\/room\/([a-z0-9_-]{1,40})\/comments(?:\/(stream|\d+))?$/.exec(url.pathname);
+  const m = /^\/api\/room\/([a-z0-9_-]{1,120})\/comments(?:\/(stream|\d+))?$/.exec(url.pathname);
   if (!m) return null;
   if (!env.DB) return fail(503, "not_configured", "Comments aren’t set up yet.");
   const db = env.DB;
