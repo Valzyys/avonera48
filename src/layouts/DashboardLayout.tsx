@@ -16,6 +16,8 @@ interface DashValue {
   catalog: Catalog | undefined;
   catalogError: Error | null;
   reloadCatalog: () => void;
+  /** Re-reads the show listing (whether a show is live) now. */
+  reloadShows: () => void;
   /** Shows on sale (IDN Plus listing), refreshed every minute; null when the list can't be read. */
   shows: DashShow[] | undefined;
   showsError: Error | null;
@@ -83,11 +85,12 @@ function Shell({ user }: { user: Account }) {
       catalog: catalog.data,
       catalogError: catalog.status === "error" ? catalog.error : null,
       reloadCatalog: catalog.reload,
+      reloadShows: reloadStage,
       shows,
       showsError: stage.status === "error" && !stage.data ? stage.error : null,
       onAir,
     }),
-    [user, catalog.data, catalog.status, catalog.error, catalog.reload, shows, stage.status, stage.data, stage.error, onAir],
+    [user, catalog.data, catalog.status, catalog.error, catalog.reload, reloadStage, shows, stage.status, stage.data, stage.error, onAir],
   );
   const nav = NAV.filter((n) => !n.admin || user.isAdmin);
   const tabs = nav.filter((n) => !n.admin);

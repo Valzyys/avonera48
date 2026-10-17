@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
 import { CheckoutDialog, type CheckoutItem } from "@/components/domain/CheckoutDialog";
 import { TheaterPlayer, type Playback } from "@/components/domain/TheaterPlayer";
+import { readOverride, usePreShowData } from "@/components/preshow/data/usePreShowData";
+import type { DashShow } from "@/features/members/stage";
 import { MemberPhoto, oshi, ShowArt } from "@/components/media/Media";
 import { Icon, Skeleton, Verified } from "@/components/ui";
 import { accessOf, ApiError, chat, type ChatMessage } from "@/features/members/api";
@@ -125,7 +127,7 @@ export default function WatchRoomPage() {
     <div className="dash-page watch">
       <div className="watch-layout" data-panel={panel}>
         <div className="watch-stage">
-          <Screen show={show.slug} title={show.title} live={live} startsAt={show.startsAt} now={now} />
+          <Screen show={show.slug} title={show.title} live={live} startsAt={show.startsAt} now={now} dash={show} />
           <div className="watch-info">
             <div className="watch-info__row">
               <span className={cx("watch-pill", live && "is-live")}>
@@ -183,11 +185,22 @@ export default function WatchRoomPage() {
 
 /* ---------- the screen ---------- */
 
-function Screen({ show, title, live, startsAt, now }: { show: string; title: string; live: boolean; startsAt: string; now: number }) {
+// The pre-show only loads on the watch page, and only while it's needed.
+const PreShow = lazy(() => import("@/components/preshow/PreShow"));
+
+function Screen({ show, title, live, startsAt, now, dash }: { show: string; title: string; live: boolean; startsAt: string; now: number; dash: DashShow }) {
+  const { user, reloadShows } = useDash();
+  const [params] = useSearchParams();
+  const ov = readOverride(params, import.meta.env.DEV || user.isAdmin);
+  const preData = usePreShowData(dash, ov);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const tried = useRef(false);
+  // The pre-show was on screen; when the show goes live, it plays its outro first.
+  const [sawPreShow, setSawPreShow] = useState(!live);
+  const [outro, setOutro] = useState<"idle" | "playing" | "done">("idle");
+  const [replay, setReplay] = useState(0);
 
   const enterRoom = useCallback(async (): Promise<void> => {
     setBusy(true);
@@ -204,14 +217,26 @@ function Screen({ show, title, live, startsAt, now }: { show: string; title: str
     }
   }, [show]);
 
-  // Back after a reload, or the show is on: walk straight in (the same viewer isn't counted twice).
+  // The show is on: walk straight in (a returning viewer isn't counted twice).
+  // The player loads behind the outro, so the switch is quick.
   useEffect(() => {
-    if (tried.current) return;
-    if (seat.get(show) || live) {
-      tried.current = true;
-      void enterRoom();
-    }
-  }, [show, live, enterRoom]);
+    if (tried.current || ov || !live) return;
+    tried.current = true;
+    void enterRoom();
+  }, [live, ov, enterRoom]);
+
+  useEffect(() => {
+    if (!live) setSawPreShow(true);
+    else if (sawPreShow && outro === "idle" && !ov) setOutro("playing");
+  }, [live, sawPreShow, outro, ov]);
+
+  // While waiting, ask the listing more often so the outro starts within seconds of going live.
+  const waiting = !live || !!ov;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = window.setInterval(() => document.visibilityState === "visible" && reloadShows(), 15_000);
+    return () => window.clearInterval(t);
+  }, [waiting, reloadShows]);
 
   const fatal = useCallback(() => {
     seat.set(null);
@@ -222,6 +247,13 @@ function Screen({ show, title, live, startsAt, now }: { show: string; title: str
     seat.set(null);
     setPlayback(null);
   }, []);
+  const outroDone = useCallback(() => setOutro("done"), []);
+  const replayOutro = useCallback(() => setReplay((n) => n + 1), []);
+
+  const stage = (node: ReactNode) => <Suspense fallback={<div className="curtain-screen" aria-busy="true" />}>{node}</Suspense>;
+  if (ov) return stage(<PreShow key={`${ov.force}-${replay}`} data={preData} status="upcoming" force={ov.force} seek={ov.seek} outro={false} onOutroDone={ov.force === "outro" ? replayOutro : undefined} />);
+  if (outro === "playing") return stage(<PreShow data={preData} status="live" outro onOutroDone={outroDone} />);
+  if (!live) return stage(<PreShow data={preData} status="upcoming" />);
 
   if (playback) return <TheaterPlayer playback={playback} title={title} onEnded={ended} onFatal={fatal} />;
 
