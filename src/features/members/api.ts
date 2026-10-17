@@ -1,6 +1,7 @@
 /** Client for the members' area: shop, orders, profile, chat and admin. */
 
 import type { Account } from "@/features/auth/AuthContext";
+import { noteServerDate } from "@/utils/serverClock";
 import type { StageShow } from "../../../worker/stage";
 
 export class ApiError extends Error {
@@ -17,6 +18,7 @@ export class ApiError extends Error {
 async function call<T>(path: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const { json, ...rest } = init ?? {};
   let res: Response;
+  const sentAt = Date.now();
   try {
     res = await fetch(path, {
       credentials: "same-origin",
@@ -27,6 +29,7 @@ async function call<T>(path: string, init?: RequestInit & { json?: unknown }): P
   } catch {
     throw new ApiError("Can’t reach the server. Check your connection and try again.", 0, "network");
   }
+  noteServerDate(res.headers.get("date"), sentAt, Date.now());
   const data = (await res.json().catch(() => null)) as (T & { ok?: boolean; message?: string; error?: string; field?: string }) | null;
   if (!res.ok || !data || data.ok === false) throw new ApiError(data?.message ?? "Something went wrong. Try again.", res.status, data?.error, data?.field);
   return data;
