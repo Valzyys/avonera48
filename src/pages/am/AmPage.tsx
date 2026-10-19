@@ -344,6 +344,19 @@ function Workspace({ name }: { name: string }) {
             </Button>
           </div>
         )}
+        {service && !service.inbox_adapter && (
+          <div className="am-notice am-notice--error" role="alert">
+            <Icon name="alert" size={18} />
+            <p>
+              Inbox sync is unavailable because the mail connection setup is
+              incomplete. Mailboxes are saved, but incoming messages cannot be
+              checked yet. Contact the site administrator.
+            </p>
+            <Button size="sm" variant="ghost" disabled={loading} onClick={() => void load()}>
+              Check connection
+            </Button>
+          </div>
+        )}
         <div className="am-workspace">
           <section className="am-card am-generator">
             <div className="am-card-heading">
@@ -490,7 +503,11 @@ function Workspace({ name }: { name: string }) {
                     : "Create or select an account"}
                 </strong>
                 <span>
-                  {workflow?.error_message ??
+                  {workflow?.current_step === "send_confirmed"
+                    ? service?.inbox_adapter
+                      ? "The provider accepted the email request. Inbox sync checks delivery separately."
+                      : "The provider accepted the email request, but inbox sync is unavailable until the mail connection is configured."
+                    : workflow?.error_message ??
                     (workflow
                       ? readable(workflow.current_step)
                       : "Your progress will appear here.")}
@@ -674,12 +691,16 @@ function Workspace({ name }: { name: string }) {
                 <i className={inbox.polling ? "is-online" : ""} />
                 {inbox.polling
                   ? `Auto-sync · ${inbox.retryDelay / 1000}s${inbox.error ? " retry" : ""}`
-                  : "Auto-sync paused"}
+                  : service && !service.inbox_adapter
+                    ? "Auto-sync unavailable"
+                    : "Auto-sync paused"}
               </span>
               <span>
                 {inbox.lastSync
                   ? `Last sync ${inbox.lastSync.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })}`
-                  : "Waiting to sync"}
+                  : service && !service.inbox_adapter
+                    ? "Connection setup required"
+                    : "Waiting to sync"}
               </span>
             </div>
             {selected && !service?.inbox_adapter && (

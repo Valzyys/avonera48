@@ -25,6 +25,7 @@ let syncs = 0;
 let generated = false;
 let domainsFail = false;
 let magicReady = false;
+let inboxReady = true;
 let sendRequests = 0;
 let uncertainSend = false;
 let lastSendBody;
@@ -56,7 +57,7 @@ await page.route("**/api/**", async (route) => {
   else if (path === "/api/am/status")
     data = {
       database: true,
-      inbox_adapter: true,
+      inbox_adapter: inboxReady,
       detail_adapter: true,
       authorization: {
         valid: false,
@@ -272,6 +273,17 @@ try {
   await expect.poll(() => sendRequests).toBe(2);
   expect(lastSendBody.acknowledge_resend).toBe(true);
   await expect(page.getByRole("button", { name: "Approve activation", exact: true })).toBeDisabled();
+  inboxReady = false;
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("Inbox sync is unavailable");
+  await expect(page.getByText("Auto-sync unavailable", { exact: true })).toBeVisible();
+  const pausedSyncs = syncs;
+  await page.clock.fastForward(15000);
+  expect(syncs).toBe(pausedSyncs);
+  inboxReady = true;
+  await page.getByRole("button", { name: "Check connection", exact: true }).click();
+  await expect.poll(() => syncs).toBeGreaterThan(pausedSyncs);
+  await expect(page.getByRole("alert")).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",
