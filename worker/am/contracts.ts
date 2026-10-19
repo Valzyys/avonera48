@@ -145,9 +145,29 @@ export const amContractSchema = z
     }
   });
 export type AmContract = z.infer<typeof amContractSchema>;
+// Documented AMGratis v1 contract. Credentials remain Worker secrets.
+const documentedAmContract: AmContract = {
+  auth_header: "x-api-key",
+  auth_prefix: "",
+  operations: {
+    send: {
+      body: { email: "email" },
+      success: { path: "/success", value: true },
+    },
+    verify: {
+      body: { email: "email", rawLink: "magic_link" },
+      success: { path: "/success", value: true },
+      receipt: "/idToken",
+    },
+    apply: {
+      body: { email: "email", idToken: "receipt" },
+      success: { path: "/status", value: "active" },
+    },
+  },
+};
 export function amContract(raw?: string): AmContract {
   try {
-    return amContractSchema.parse(JSON.parse(raw ?? ""));
+    return amContractSchema.parse(raw ? JSON.parse(raw) : documentedAmContract);
   } catch {
     throw new AmError(
       503,

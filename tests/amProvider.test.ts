@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { domains, providerRequest } from "../worker/am/providers";
+import { amRequest, domains, providerRequest } from "../worker/am/providers";
+import { amContract } from "../worker/am/contracts";
 let mocked: ReturnType<typeof vi.fn>;
 const supplied = {
   success: true,
@@ -44,6 +45,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("AM provider transport", () => {
+  it("maps documented verification and activation fields and requires confirmed results", async () => {
+    const contract = amContract();
+    mocked.mockResolvedValueOnce(Response.json({ success: true, idToken: "test-session" }));
+    expect(await amRequest("verify", contract, "test-key", {
+      email: "owner@example.com", magic_link: "https://alightcreative.com/auth/action?test=1",
+    })).toEqual({ receipt: "test-session" });
+    expect(JSON.parse(mocked.mock.calls[0][1].body)).toEqual({
+      email: "owner@example.com", rawLink: "https://alightcreative.com/auth/action?test=1",
+    });
+    mocked.mockResolvedValueOnce(Response.json({ success: true, status: "active" }));
+    await amRequest("apply", contract, "test-key", { email: "owner@example.com", receipt: "test-session" });
+    expect(JSON.parse(mocked.mock.calls[1][1].body)).toEqual({ email: "owner@example.com", idToken: "test-session" });
+    mocked.mockResolvedValueOnce(Response.json({ success: true, status: "pending" }));
+    await expect(amRequest("apply", contract, "test-key", { email: "owner@example.com", receipt: "test-session" })).rejects.toMatchObject({ code: "provider_unsuccessful" });
+    mocked.mockResolvedValueOnce(Response.json({ success: true }));
+    await expect(amRequest("verify", contract, "test-key", { email: "owner@example.com", magic_link: "https://alightcreative.com/auth/action?test=1" })).rejects.toMatchObject({ code: "provider_shape_changed" });
+  });
   it("accepts the actual supplied domain response", async () => {
     mocked.mockResolvedValueOnce(Response.json(supplied));
     expect((await domains()).map((d) => d.name)).toEqual(

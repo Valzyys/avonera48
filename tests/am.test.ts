@@ -440,19 +440,32 @@ describe("AM approved workflows", () => {
     ).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-  it("explains missing send setup without inventing a provider contract", async () => {
+  it("uses the documented magic-link format without an environment mapping", async () => {
     delete env.AM_API_CONTRACT;
+    const { account, workflow } = await seed();
     let status = await (await call("/status")).json();
+    expect(status.actions.send.ready).toBe(true);
+    expect(status.actions.verify.ready).toBe(false);
+    expect(status.actions.apply.ready).toBe(false);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    expect((await call(
+      `/accounts/${account}/workflows/${workflow}/send`, "POST",
+      { consent: true, owns_account: true },
+    )).status).toBe(200);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://www.amgratis.my.id/api/v1/send-magiclink");
+    expect(new Headers(init.headers).get("x-api-key")).toBe(env.AM_API_KEY);
+    expect(Object.keys(JSON.parse(init.body))).toEqual(["email"]);
+    env.AM_API_CONTRACT = "invalid";
+    status = await (await call("/status")).json();
+    expect(status.actions.send.reason).toContain("format has not been configured");
     expect(status.actions.send.ready).toBe(false);
-    expect(status.actions.send.reason).toContain(
-      "format has not been configured",
-    );
     delete env.AM_API_KEY;
     status = await (await call("/status")).json();
     expect(status.actions.send.reason).toContain(
       "credential is not configured",
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("requires step-specific consent and never opens a magic link automatically", async () => {

@@ -44,8 +44,9 @@ is preselected only when present and active; otherwise the user must select an
 actual alternative. Username entropy is 128 bits from Web Crypto.
 
 The supplied documentation did **not** include JSON responses for inbox or
-message detail, or request/response/authentication schemas for AMGratis. They
-cannot be inferred from endpoint names. There are no guessed production defaults
+message detail. Those structures cannot be inferred from endpoint names.
+AMGratis v1 request fields and success responses have now been documented and
+are built into the backend (see below). There are no guessed production defaults
 or production mock data. Generate and save mailboxes works independently of the
 remaining adapters. Missing mappings return explicit setup errors, never an empty
 inbox or fake success. Live endpoint access was unavailable in the implementation
@@ -78,8 +79,19 @@ No endpoint accepts an arbitrary provider URL or inbox address from the browser.
 
 ### AM_API_CONTRACT (Worker variable, JSON)
 
-This is a required adapter for the provider's **actual documented contract**.
-Do not populate it from guesses. It defines:
+This is an optional override. Leave it unset to use the documented AMGratis v1
+format built into the Worker:
+
+- Header: `x-api-key`, using the `AM_API_KEY` secret without a prefix.
+- Send: `{email}`, requiring `success: true`.
+- Verify: `{email, rawLink}`, requiring `success: true` and a nonempty `idToken`.
+- Apply: `{email, idToken}`, requiring confirmed active status.
+
+If a stale or invalid `AM_API_CONTRACT` is already set in Cloudflare, remove it
+and redeploy to select these defaults. No API key belongs in this variable.
+This configuration does not bypass user consent or verified licensing authority.
+
+For a documented provider contract change, an explicit override defines:
 
 - `auth_header`: `Authorization`, `X-API-Key`, or `x-api-key` as documented by the
   provider; `auth_prefix`: the exact prefix, including any required trailing space.
