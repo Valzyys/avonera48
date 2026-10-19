@@ -27,6 +27,7 @@ import {
   receiptCodec,
   requireGrant,
   privateLinkPolicy,
+  verificationLink,
   type AmEnv,
 } from "./authorization";
 
@@ -345,7 +346,7 @@ async function runOperation(
         (await sha256(candidate.url)) === parsed.link_sha256 &&
         permittedLink(candidate.url, detail.sender, personal ? privateLinkPolicy : grant!)
       ) {
-        link = candidate.url;
+        link = verificationLink(candidate.url, detail.sender, personal ? privateLinkPolicy : grant!);
         break;
       }
     }
@@ -363,14 +364,16 @@ async function runOperation(
         ? ["awaiting_email", "awaiting_approval"]
         : ["verified"];
   const resend = operation === "send" && workflow.status === "uncertain" &&
-    workflow.current_step === "send";
+    ["send", "verify"].includes(workflow.current_step);
+  const restartEmail = operation === "send" && workflow.status === "failed" &&
+    ["send", "verify"].includes(workflow.current_step);
   if (resend && !consent.data.acknowledge_resend)
     throw new AmError(400, "resend_consent_required",
       "Check the inbox first, then explicitly approve another email. The previous request may have succeeded.");
   if (resend && Date.now() - Date.parse(workflow.updated_at) < 60000)
     throw new AmError(429, "resend_cooldown",
       "Wait one minute after the previous attempt and check your inbox before requesting another email.");
-  if (!allowed.includes(workflow.status) && !resend)
+  if (!allowed.includes(workflow.status) && !resend && !restartEmail)
     throw new AmError(
       409,
       "workflow_state",
@@ -427,20 +430,22 @@ async function runOperation(
     const detail = error instanceof AmError
       ? `${error.message} (${error.code}${error.diagnostic?.upstream_status ? `; HTTP ${error.diagnostic.upstream_status}` : ""})`
       : "The provider outcome could not be confirmed.";
-    const guidance = operation === "send"
+    const declined = error instanceof AmError && error.code === "provider_declined";
+    const guidance = operation === "send" || operation === "verify"
       ? "Check your inbox first. After one minute you may explicitly request another email; the previous request may have succeeded."
       : "Contact support to confirm the outcome before continuing.";
     await db
       .prepare(
-        "UPDATE am_workflows SET status='uncertain', error_message=?, updated_at=? WHERE id=?",
+        "UPDATE am_workflows SET status=?, error_message=?, updated_at=? WHERE id=?",
       )
       .bind(
+        declined ? "failed" : "uncertain",
         `${detail} ${guidance}`,
         now(),
         workflowId,
       )
       .run();
-    await activity(db, account.id, `${operation}_outcome_unknown`, "uncertain");
+    await activity(db, account.id, declined ? `${operation}_declined` : `${operation}_outcome_unknown`, declined ? "failed" : "uncertain");
     throw error;
   }
 }
@@ -720,8 +725,12 @@ export async function handleAm(
       await receiptCodec(env, combined[1]);
       const input: Record<string, unknown> = { consent: true, owns_account: true };
       if (state.status !== "verified") {
-        const rows = await db.prepare("SELECT id FROM am_messages WHERE account_id=? ORDER BY received_at DESC,id DESC LIMIT 10")
-          .bind(account.id).all<{ id: string }>();
+        const sent = await db.prepare("SELECT created_at FROM am_activity_logs WHERE account_id=? AND action='send_approved' ORDER BY created_at DESC,id DESC LIMIT 1")
+          .bind(account.id).first<{ created_at: string }>();
+        // Avoid replaying an older login email while waiting for the new one.
+        const cutoff = sent ? new Date(Date.parse(sent.created_at) - 30000).toISOString() : null;
+        const rows = await db.prepare("SELECT id FROM am_messages WHERE account_id=? AND (? IS NULL OR received_at>=?) ORDER BY received_at DESC,id DESC LIMIT 10")
+          .bind(account.id, cutoff, cutoff).all<{ id: string }>();
         for (const row of rows.results) {
           const detail = await ownedMessage(env, db, account, row.id);
           const links = detail.links.filter(link => link.authentication && permittedLink(link.url, detail.sender, privateLinkPolicy));
@@ -734,7 +743,7 @@ export async function handleAm(
           }
         }
         if (!input.message_id)
-          throw new AmError(409, "magic_link_missing", "No Alight sign-in link was found in this mailbox. Refresh the inbox first.");
+          throw new AmError(409, "magic_link_missing", "No fresh Alight sign-in link was found. Wait for the latest email and refresh the inbox first.");
       }
       const internal = () => new Request(request.url, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),

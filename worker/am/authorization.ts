@@ -144,6 +144,21 @@ export const privateLinkPolicy = {
   sender_domains: ["alightcreative.com", "alight-creative.firebaseapp.com"],
   magic_link_hosts: ["alightcreative.com", "login.alightcreative.com", "alight-creative.firebaseapp.com"],
 };
+/** Decode only the documented Firebase wrapper; never fetch an authentication URL. */
+export function verificationLink(url: string, sender: string, policy: Pick<AmGrant, "sender_domains" | "magic_link_hosts">) {
+  if (!permittedLink(url, sender, policy))
+    throw new AmError(409, "link_not_approved", "The authentication link is outside the trusted sender and host policy.");
+  const outer = new URL(url);
+  if (outer.hostname !== "alight-creative.firebaseapp.com" || outer.pathname !== "/__/auth/links")
+    return url;
+  const nested = outer.searchParams.getAll("link");
+  if (nested.length !== 1 || !permittedLink(nested[0], sender, policy))
+    throw new AmError(409, "link_not_approved", "The Firebase email does not contain a single trusted authentication link.");
+  const inner = new URL(nested[0]);
+  if (inner.hostname !== "alightcreative.com" || !["/auth_action/", "/auth_action", "/auth/action", "/auth/action/"].includes(inner.pathname))
+    throw new AmError(409, "link_not_approved", "The Firebase email points to an unsupported authentication route.");
+  return inner.href;
+}
 export function permittedLink(url: string, sender: string, grant: Pick<AmGrant, "sender_domains" | "magic_link_hosts">) {
   let hostName: string;
   try {

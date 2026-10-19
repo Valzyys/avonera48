@@ -3,7 +3,8 @@ import { z } from "zod";
 export interface ProviderDiagnostic {
   service: "tmailcloud" | "amgratis";
   method: string;
-  failure: "network" | "timeout" | "dns" | "tls" | "http";
+  failure: "network" | "timeout" | "dns" | "tls" | "http" | "response";
+  operation?: "send" | "verify" | "apply";
   upstream_status?: number;
   transport_code?: string;
   platform_code?: string;

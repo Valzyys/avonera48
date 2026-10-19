@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { amRequest, domains, providerRequest } from "../worker/am/providers";
 import { amContract } from "../worker/am/contracts";
+import { privateLinkPolicy, verificationLink } from "../worker/am/authorization";
 let mocked: ReturnType<typeof vi.fn>;
 const supplied = {
   success: true,
@@ -45,6 +46,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("AM provider transport", () => {
+  it("unwraps the real Firebase link format without changing nested login parameters", () => {
+    const inner = "https://alightcreative.com/auth_action/?apiKey=test-only&mode=signIn&oobCode=test-only&continueUrl=https://alightcreative.com?ui_sid%3Dtest%26ui_sd%3D0&lang=en";
+    const sender = "noreply@alight-creative.firebaseapp.com";
+    const wrapped = `https://alight-creative.firebaseapp.com/__/auth/links?link=${encodeURIComponent(inner)}`;
+    expect(verificationLink(wrapped, sender, privateLinkPolicy)).toBe(inner);
+    for (const nested of ["https://evil.example/auth_action/?oobCode=test", "http://alightcreative.com/auth_action/", "https://user:password@alightcreative.com/auth_action/", "https://alightcreative.com/redirect"]) {
+      expect(() => verificationLink(`https://alight-creative.firebaseapp.com/__/auth/links?link=${encodeURIComponent(nested)}`, sender, privateLinkPolicy)).toThrow();
+    }
+    expect(() => verificationLink(wrapped + "&link=" + encodeURIComponent(inner), sender, privateLinkPolicy)).toThrow();
+    expect(mocked).not.toHaveBeenCalled();
+  });
+  it("identifies explicit provider refusal and its stage without exposing response secrets", async () => {
+    mocked.mockResolvedValueOnce(Response.json({ success: false, message: "sensitive-provider-message", idToken: "sensitive-token" }));
+    await expect(amRequest("verify", amContract(), "test-key", {
+      email: "owner@example.com", magic_link: "https://alightcreative.com/auth_action/?oobCode=test",
+    })).rejects.toMatchObject({ status: 422, code: "provider_declined", diagnostic: { operation: "verify" }, message: expect.not.stringContaining("sensitive") });
+    mocked.mockResolvedValueOnce(Response.json({ success: true, status: "pending" }));
+    await expect(amRequest("apply", amContract(), "test-key", { email: "owner@example.com", receipt: "test" })).rejects.toMatchObject({ code: "provider_unsuccessful", diagnostic: { operation: "apply" } });
+  });
   it("maps documented verification and activation fields and requires confirmed results", async () => {
     const contract = amContract();
     mocked.mockResolvedValueOnce(Response.json({ success: true, idToken: "test-session" }));

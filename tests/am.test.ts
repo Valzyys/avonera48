@@ -427,8 +427,15 @@ describe("AM approved workflows", () => {
     const id = crypto.randomUUID();
     await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
       .bind(id, account, "private-message", date).run();
+    const inner = "https://alightcreative.com/auth_action/?mode=signIn&oobCode=test-only";
+    const wrapper = `https://alight-creative.firebaseapp.com/__/auth/links?link=${encodeURIComponent(inner)}`;
     fetchMock.mockImplementation(async (url) => {
-      if (String(url).includes("/api/email/message/")) return Response.json(detailPayload("private-message"));
+      if (String(url).includes("/api/email/message/")) {
+        const payload = detailPayload("private-message");
+        payload.payload.from = "noreply@alight-creative.firebaseapp.com";
+        payload.payload.body = `<a href="${wrapper}">Sign in to Alight Creative</a>`;
+        return Response.json(payload);
+      }
       if (String(url).endsWith("/verify-account")) return Response.json({ confirmed: true, receipt: "private-session-token" });
       return Response.json({ confirmed: true });
     });
@@ -442,12 +449,36 @@ describe("AM approved workflows", () => {
       "https://www.amgratis.my.id/api/v1/apply-premium",
     ]);
     expect(JSON.parse(writes[1][1].body).proof).toBe("private-session-token");
+    expect(JSON.parse(writes[0][1].body).link).toBe(inner);
     expect(fetchMock.mock.calls.some(([url]) => url === link)).toBe(false);
     const row = await db.prepare("SELECT status,provider_receipt FROM am_workflows WHERE id=?").bind(workflow).first();
     expect(row?.status).toBe("completed");
     expect(row?.provider_receipt).not.toContain("private-session-token");
     expect((await call(path, "POST", {}, admin)).status).toBe(409);
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("amgratis.my.id"))).toHaveLength(2);
+  });
+  it("recovers a declined verification with a fresh email and excludes old messages", async () => {
+    const { account, workflow } = await seed();
+    const admin = { ...user, isAdmin: true };
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
+      .bind(crypto.randomUUID(), account, "old-message", new Date(Date.now() - 3600000).toISOString()).run();
+    fetchMock.mockImplementation(async (url) => Response.json(
+      String(url).includes("/api/email/message/") ? detailPayload("old-message") : { success: false },
+    ));
+    const path = `/accounts/${account}/workflows/${workflow}`;
+    expect((await call(`${path}/verify-and-apply`, "POST", {}, admin)).status).toBe(422);
+    expect((await db.prepare("SELECT status FROM am_workflows WHERE id=?").bind(workflow).first())?.status).toBe("failed");
+    fetchMock.mockResolvedValueOnce(Response.json({ confirmed: true }));
+    expect((await call(`${path}/send`, "POST", { consent: true, owns_account: true }, admin)).status).toBe(200);
+    const before = fetchMock.mock.calls.length;
+    const waiting = await call(`${path}/verify-and-apply`, "POST", {}, admin);
+    expect(waiting.status).toBe(409);
+    expect((await waiting.json()).error).toBe("magic_link_missing");
+    expect(fetchMock).toHaveBeenCalledTimes(before);
+    await db.prepare("UPDATE am_workflows SET status='uncertain',current_step='verify',updated_at=? WHERE id=?")
+      .bind(new Date(Date.now() - 61000).toISOString(), workflow).run();
+    fetchMock.mockResolvedValueOnce(Response.json({ confirmed: true }));
+    expect((await call(`${path}/send`, "POST", { consent: true, owns_account: true, acknowledge_resend: true }, admin)).status).toBe(200);
   });
   it("stops private activation after a failed verification and never replays an uncertain token exchange", async () => {
     const { account, workflow } = await seed();

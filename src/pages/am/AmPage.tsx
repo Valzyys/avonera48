@@ -101,7 +101,8 @@ function Workspace({ name }: { name: string }) {
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
   const personal = service?.private_admin === true;
-  const resend = workflow?.status === "uncertain" && workflow.current_step === "send";
+  const resend = workflow?.status === "uncertain" && ["send", "verify"].includes(workflow.current_step);
+  const restartEmail = workflow?.status === "failed" && ["send", "verify"].includes(workflow.current_step);
   const frame = useMemo(
     () => (message?.html ? emailDocument(message.html, images) : ""),
     [message?.html, images],
@@ -550,13 +551,13 @@ function Workspace({ name }: { name: string }) {
                   !workflow ||
                   operating ||
                   !can("magiclink:send") ||
-                  (!resend && !["awaiting_email", "awaiting_approval"].includes(
+                  (!resend && !restartEmail && !["awaiting_email", "awaiting_approval"].includes(
                     workflow.status,
                   ))
                 }
                 onClick={() => personal && !resend ? void runPrivate("send") : approve("send")}
               >
-                {resend ? "Request another email" : "Request magic link"}
+                {resend || restartEmail ? "Request another email" : "Request magic link"}
               </Button>
               {personal ? <Button
                 size="sm" icon="key" loading={operating}

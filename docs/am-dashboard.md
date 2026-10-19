@@ -154,7 +154,8 @@ POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` selects a lin
 from the newest saved messages of that owned mailbox. It fetches the message,
 requires an exact trusted Alight sender and HTTPS link host, then re-fetches and
 matches the link hash before verification. Firebase Alight wrapper links are
-submitted unchanged to the provider; the Worker never follows them. Multiple
+decoded locally to their nested Alight authentication URL, with both hosts and
+the nested route validated. No authentication URL is fetched by the Worker. Multiple
 candidate links in one message fail explicitly instead of choosing arbitrarily.
 
 Only a confirmed verification with a nonempty token permits activation. Tokens
@@ -228,10 +229,17 @@ license grant. If the documented send response includes a receipt, the workflow
 encryption secret is required before sending. Sending an email never unlocks
 verification or activation. A database compare-and-swap and unique running-workflow index prevent
 concurrent operations. A timeout/rejection after a provider write is conservatively
-marked `uncertain`, without automatic retries or claims of success. Uncertain verification or licensing outcomes require operator reconciliation.
-For an uncertain email-send step only, the user may check their inbox and approve
+marked `uncertain`, without automatic retries or claims of success. Uncertain activation outcomes require operator reconciliation.
+For an uncertain email-send or verification step, the user may check their inbox and approve
 a new email after a one-minute cooldown, explicitly acknowledging that the prior
-request may have succeeded. This never resets verification or licensing state.
+request may have succeeded. This starts a new email request, never replays the
+uncertain verification token or retries an uncertain activation. Explicit
+`success:false` responses are stored as `failed` with the operation identified;
+a failed send or verification can start a new email request. A fresh email
+request excludes messages older than that request (30 seconds of clock skew
+allowed), so Verify & Apply does not accidentally reuse an old sign-in link.
+Provider error text and tokens are never forwarded; safe diagnostics identify
+the operation and whether failure was a refusal or an unconfirmed response.
 The stored error includes only sanitized internal error codes and HTTP status,
 never provider bodies, login links, tokens or raw exception messages.
 

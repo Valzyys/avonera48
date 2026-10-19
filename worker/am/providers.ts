@@ -431,6 +431,7 @@ export async function amRequest(
       "provider_contract_invalid",
       "The provider contract must bind this operation to the account email.",
     );
+  const stage = operation === "send" ? "Email request" : operation === "verify" ? "Verification" : "Activation";
   const raw = await providerRequest("am", endpoints[operation], {
     method: "POST",
     headers: {
@@ -438,8 +439,22 @@ export async function amRequest(
       [contract.auth_header]: `${contract.auth_prefix}${apiKey}`,
     },
     body: JSON.stringify(body),
+  }).catch((error: unknown) => {
+    if (error instanceof AmError)
+      throw new AmError(error.status, error.code, `${stage}: ${error.message}`, {
+        service: "amgratis", method: "POST", failure: "response",
+        ...error.diagnostic, operation,
+      });
+    throw error;
   });
-  requireSuccess(raw, config.success);
+  const diagnostic = { service: "amgratis", method: "POST", failure: "response", operation } as const;
+  if (at(raw, "/success") === false)
+    throw new AmError(422, "provider_declined",
+      operation === "verify"
+        ? "The provider declined verification. Request a fresh sign-in email; this link may be expired, already used, or unsupported."
+        : `The provider declined the ${operation === "send" ? "email request" : "activation"}. No success was confirmed.`, diagnostic);
+  if (at(raw, config.success.path) !== config.success.value)
+    throw new AmError(502, "provider_unsuccessful", `${stage}: the provider response did not confirm success.`, diagnostic);
   return {
     receipt:
       config.receipt !== undefined
