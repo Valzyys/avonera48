@@ -27,7 +27,8 @@ the signed-in dashboard.
    child message/workflow/activity records have D1 foreign keys to AM accounts.
 
 3. Configure the response mappings below from **actual provider responses**.
-4. Set the required secrets and signed authorization for provider workflows.
+4. Set `AM_API_KEY` and `AM_WORKFLOW_SECRET`. Private workflows use the existing
+   administrator session; signed grants are only used by the separate delegated-user flow.
 5. Run `npm run typecheck`, `npm test`, `npm run lint`, `npm run build`, then deploy
    using the repository's existing Worker/Pages deployment.
 
@@ -132,7 +133,6 @@ Set secrets through Cloudflare, never in source control:
 ```sh
 npx wrangler secret put AM_API_KEY
 npx wrangler secret put AM_WORKFLOW_SECRET
-npx wrangler secret put AM_AUTHORIZATION_GRANT
 ```
 
 `AM_WORKFLOW_SECRET` must contain at least 32 high-entropy characters. Provider
@@ -141,20 +141,36 @@ email bodies, login links and OTPs are fetched on demand rather than persisted.
 Previews redact URLs and numeric code candidates. No provider body, credential,
 authentication link or receipt is written to activity logs.
 
-An API key, user checkbox, administrative boolean or a third-party service name
-is **not** proof of authority to authenticate accounts or grant Alight licenses.
-To enable account verification and license activation, obtain a verifiable authorization from Alight Creative or
-its independently verified authorized licensing authority. Configure:
+### Private administrator workflow
 
-- `AM_AUTHORIZATION_ISSUER`: exact trusted issuer URL.
-- `AM_AUTHORIZATION_PUBLIC_KEY`: that authority's independently verified RSA
-  public JWK (`kty`, `n`, `e`), obtained through its official channel.
-- `AM_AUTHORIZATION_GRANT`: an RS256-signed JWT from that authority.
+For the site owner's own accounts, existing authenticated administrators can use
+**Verify & Apply** without configuring a signed authorization grant or accepting
+additional consent dialogs. Administrator identity comes from the existing
+server-side role / `ADMIN_EMAILS` check, never from request JSON. No admin role is
+granted by visiting `/am`. The API key and workflow encryption secret are still
+required. Mailboxes remain scoped to the signed-in user, including administrators.
 
-Do not self-sign a grant, use this project's test keys, or trust an unverified
-key supplied with a token. Configuring a trust anchor is an operator responsibility;
-this repository cannot establish legal licensing rights on the operator's behalf.
-There is no built-in key or enabled bypass.
+POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` selects a link
+from the newest saved messages of that owned mailbox. It fetches the message,
+requires an exact trusted Alight sender and HTTPS link host, then re-fetches and
+matches the link hash before verification. Firebase Alight wrapper links are
+submitted unchanged to the provider; the Worker never follows them. Multiple
+candidate links in one message fail explicitly instead of choosing arbitrarily.
+
+Only a confirmed verification with a nonempty token permits activation. Tokens
+are encrypted in D1, never sent to the browser. If verification completed but
+activation has not started, the same button can resume from `verified`. Ambiguous
+verification or activation results remain locked against automatic replay. This
+mode uses the provider's API and does not assert that the website independently
+validated the provider's licensing arrangements. It does not make these actions
+available to ordinary users.
+
+### Optional delegated-user authorization (existing flow)
+
+The earlier signed-grant integration remains available for delegated non-admin
+users. It is an Avonera access-control mechanism, not an AMGratis API requirement.
+Configure `AM_AUTHORIZATION_ISSUER`, `AM_AUTHORIZATION_PUBLIC_KEY` and the secret
+`AM_AUTHORIZATION_GRANT` only when using that separate flow.
 
 The signed grant contract is:
 
@@ -173,8 +189,7 @@ The signed grant contract is:
 If no supported signed authorization is available, mailbox management, manual
 message review, and explicitly approved magic-link email requests (with a valid
 provider key and documented send contract) remain usable. Account verification
-and activation stay locked. Do not bypass
-this guard to make a third-party activation endpoint appear functional.
+and activation stay locked for non-admin users.
 
 ## Internal API
 
@@ -197,16 +212,17 @@ cannot grant access.
 | POST `/api/am/accounts/:id/workflows/:workflowId/send`   | Explicitly approved magic-link request                      |
 | POST `/api/am/accounts/:id/workflows/:workflowId/verify` | Submit the exact reviewed link                              |
 | POST `/api/am/accounts/:id/workflows/:workflowId/apply`  | Explicitly approved, licensed activation                    |
+| POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` | Private admin verification followed by confirmed activation |
 
-Each workflow mutation requires `consent:true, owns_account:true`. Verify also
+Individual step mutations require `consent:true, owns_account:true`.
+The private admin combined endpoint uses the authenticated button action directly. Verify also
 requires `message_id` (local UUID) and `link_sha256`. The backend re-fetches that
 owned message, matches the exact reviewed URL hash, checks its sender and host
-against the signed grant, and only then submits it to the verification API. It
+against the private admin allowlist or delegated signed grant, and only then submits it to the verification API. It
 never follows, clicks or redeems authentication URLs directly.
 
 Only a confirmed verification unlocks activation; only a confirmed activation
-response marks the workflow `completed`. Authorization is rechecked at each
-authentication or licensing step. Sending a sign-in email requires an owned
+response marks the workflow `completed`. Access is checked on every request using the private admin session or delegated grant. Sending a sign-in email requires an owned
 mailbox, a valid configured API key/send contract and explicit consent, but no
 license grant. If the documented send response includes a receipt, the workflow
 encryption secret is required before sending. Sending an email never unlocks

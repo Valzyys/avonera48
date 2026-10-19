@@ -52,6 +52,7 @@ export interface AmPage<T> {
   next_cursor: string | null;
 }
 export interface AmService {
+  private_admin?: boolean;
   database: boolean;
   inbox_adapter: boolean;
   detail_adapter: boolean;

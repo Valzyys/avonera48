@@ -26,6 +26,8 @@ let generated = false;
 let domainsFail = false;
 let magicReady = false;
 let inboxReady = true;
+let privateAdmin = false;
+let combinedRequests = 0;
 let sendRequests = 0;
 let uncertainSend = false;
 let lastSendBody;
@@ -57,6 +59,7 @@ await page.route("**/api/**", async (route) => {
   else if (path === "/api/am/status")
     data = {
       database: true,
+      private_admin: privateAdmin,
       inbox_adapter: inboxReady,
       detail_adapter: true,
       authorization: {
@@ -72,8 +75,8 @@ await page.route("**/api/**", async (route) => {
           reason:
             "Magic-link request format has not been configured for the provider.",
         },
-        verify: { ready: false, reason: "Authorization required" },
-        apply: { ready: false, reason: "Authorization required" },
+        verify: { ready: privateAdmin, reason: "Authorization required" },
+        apply: { ready: privateAdmin, reason: "Authorization required" },
       },
       max_accounts: 20,
     };
@@ -84,6 +87,9 @@ await page.route("**/api/**", async (route) => {
       generated = true;
       data = { account };
     } else data = { items: generated ? [account] : [], next_cursor: null };
+  } else if (path.endsWith("/verify-and-apply")) {
+    combinedRequests++;
+    data = { status: "completed" };
   } else if (path.endsWith("/send")) {
     sendRequests++;
     lastSendBody = route.request().postDataJSON();
@@ -284,6 +290,13 @@ try {
   await page.getByRole("button", { name: "Check connection", exact: true }).click();
   await expect.poll(() => syncs).toBeGreaterThan(pausedSyncs);
   await expect(page.getByRole("alert")).toHaveCount(0);
+  privateAdmin = true;
+  uncertainSend = false;
+  await page.reload();
+  await expect(page.getByText("Private admin access", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Verify & Apply", exact: true }).click();
+  await expect.poll(() => combinedRequests).toBe(1);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

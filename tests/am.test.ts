@@ -82,7 +82,7 @@ async function call(
   path: string,
   method = "GET",
   data?: unknown,
-  actor = user,
+  actor: { id: string; isAdmin?: boolean } = user,
 ) {
   const request = new Request(`https://avonera.example/api/am${path}`, {
     method,
@@ -205,6 +205,19 @@ afterEach(() => vi.unstubAllGlobals());
 afterAll(async () => mf?.dispose());
 
 describe("AM authenticated persistence", () => {
+  it("derives private access from the existing server-side admin role", async () => {
+    const token = "a".repeat(64);
+    const email = "private-admin@example.com";
+    await kv.put(`sess:${await sha256(token)}`, JSON.stringify({ email, createdAt: date }));
+    const record = { id: "owner", email, name: "Owner", salt: "test", hash: "test", iterations: 1, createdAt: date };
+    const request = new Request("https://avonera.example/api/am/status", { headers: { cookie: `avn_session=${token}` } });
+    await kv.put(`user:${email}`, JSON.stringify({ ...record, role: "admin" }));
+    expect((await (await handleAuth(request, env, new URL(request.url)))!.json()).private_admin).toBe(true);
+    await kv.put(`user:${email}`, JSON.stringify(record));
+    const regular = await (await handleAuth(request, env, new URL(request.url)))!.json();
+    expect(regular.private_admin).toBe(false);
+    expect(regular.actions.verify.ready).toBe(false);
+  });
   it("requires the existing session and rejects cross-origin mutations", async () => {
     const request = new Request("https://avonera.example/api/am/accounts");
     expect((await handleAuth(request, env, new URL(request.url)))?.status).toBe(
@@ -404,6 +417,65 @@ describe("AM authenticated persistence", () => {
 });
 
 describe("AM approved workflows", () => {
+  it("allows a private admin to verify and apply in sequence without a signed grant", async () => {
+    const { account, workflow } = await seed();
+    const admin = { ...user, isAdmin: true };
+    const status = await (await call("/status", "GET", undefined, admin)).json();
+    expect(status.private_admin).toBe(true);
+    expect(status.actions.verify.ready).toBe(true);
+    expect(status.actions.apply.ready).toBe(true);
+    const id = crypto.randomUUID();
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
+      .bind(id, account, "private-message", date).run();
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("/api/email/message/")) return Response.json(detailPayload("private-message"));
+      if (String(url).endsWith("/verify-account")) return Response.json({ confirmed: true, receipt: "private-session-token" });
+      return Response.json({ confirmed: true });
+    });
+    const path = `/accounts/${account}/workflows/${workflow}/verify-and-apply`;
+    expect((await call(path, "POST", { isAdmin: true })).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await call(path, "POST", {}, admin)).status).toBe(200);
+    const writes = fetchMock.mock.calls.filter(([url]) => String(url).includes("amgratis.my.id"));
+    expect(writes.map(([url]) => url)).toEqual([
+      "https://www.amgratis.my.id/api/v1/verify-account",
+      "https://www.amgratis.my.id/api/v1/apply-premium",
+    ]);
+    expect(JSON.parse(writes[1][1].body).proof).toBe("private-session-token");
+    expect(fetchMock.mock.calls.some(([url]) => url === link)).toBe(false);
+    const row = await db.prepare("SELECT status,provider_receipt FROM am_workflows WHERE id=?").bind(workflow).first();
+    expect(row?.status).toBe("completed");
+    expect(row?.provider_receipt).not.toContain("private-session-token");
+    expect((await call(path, "POST", {}, admin)).status).toBe(409);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("amgratis.my.id"))).toHaveLength(2);
+  });
+  it("stops private activation after a failed verification and never replays an uncertain token exchange", async () => {
+    const { account, workflow } = await seed();
+    const admin = { ...user, isAdmin: true };
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
+      .bind(crypto.randomUUID(), account, "private-message", date).run();
+    fetchMock.mockImplementation(async (url) => Response.json(
+      String(url).includes("/api/email/message/") ? detailPayload("private-message") : { confirmed: false },
+    ));
+    const path = `/accounts/${account}/workflows/${workflow}/verify-and-apply`;
+    expect((await call(path, "POST", {}, admin)).status).toBe(502);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/apply-premium"))).toBe(false);
+    expect((await call(path, "POST", {}, admin)).status).toBe(409);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/verify-account"))).toHaveLength(1);
+  });
+  it("refuses private verification of another user's account or an untrusted sender", async () => {
+    const { account, workflow } = await seed();
+    const path = `/accounts/${account}/workflows/${workflow}/verify-and-apply`;
+    expect((await call(path, "POST", {}, { ...stranger, isAdmin: true })).status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Sender','Sign in','',?)")
+      .bind(crypto.randomUUID(), account, "untrusted", date).run();
+    const payload = detailPayload("untrusted");
+    payload.payload.from = "attacker@example.com";
+    fetchMock.mockResolvedValue(Response.json(payload));
+    expect((await call(path, "POST", {}, { ...user, isAdmin: true })).status).toBe(409);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("amgratis.my.id"))).toBe(false);
+  });
   it("rejects absent, expired and forged authorization", async () => {
     const { account, workflow } = await seed();
     expect(

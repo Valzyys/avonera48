@@ -438,7 +438,7 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   const user = await currentUser(request, kv);
   if (method === "GET" && path === "/api/auth/me") return reply({ ok: true, user: user ? publicUser(user, env) : null });
   if (!user) return fail(401, "unauthenticated", "Sign in first.");
-  if (path.startsWith("/api/am/")) return handleAm(request, env, user, url);
+  if (path.startsWith("/api/am/")) return handleAm(request, env, { ...user, isAdmin: adminOf(env, user) }, url);
 
   // JSON posts must be same-origin JSON; uploads and deletes check the origin.
   const origin = request.headers.get("origin");

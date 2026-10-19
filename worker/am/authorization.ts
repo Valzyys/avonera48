@@ -140,7 +140,11 @@ export async function receiptCodec(env: AmEnv, workflow: string) {
     );
   return mediaUrls(`${env.AM_WORKFLOW_SECRET}|am-workflow`, workflow);
 }
-export function permittedLink(url: string, sender: string, grant: AmGrant) {
+export const privateLinkPolicy = {
+  sender_domains: ["alightcreative.com", "alight-creative.firebaseapp.com"],
+  magic_link_hosts: ["alightcreative.com", "login.alightcreative.com", "alight-creative.firebaseapp.com"],
+};
+export function permittedLink(url: string, sender: string, grant: Pick<AmGrant, "sender_domains" | "magic_link_hosts">) {
   let hostName: string;
   try {
     const u = new URL(url);

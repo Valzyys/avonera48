@@ -100,6 +100,7 @@ function Workspace({ name }: { name: string }) {
   );
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
+  const personal = service?.private_admin === true;
   const resend = workflow?.status === "uncertain" && workflow.current_step === "send";
   const frame = useMemo(
     () => (message?.html ? emailDocument(message.html, images) : ""),
@@ -262,6 +263,21 @@ function Workspace({ name }: { name: string }) {
       toast.error(errorText(e));
       await inbox.refresh();
     } finally {
+      setOperating(false);
+    }
+  };
+  const runPrivate = async (operation: "send" | "verify-and-apply") => {
+    if (!selected || !workflow || operating) return;
+    setOperating(true);
+    try {
+      await am.operation(selected, workflow.id, operation, {
+        consent: true, owns_account: true,
+      });
+      toast.success(operation === "send" ? "Provider confirmed the email request" : "Provider confirmed activation");
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      await inbox.refresh();
       setOperating(false);
     }
   };
@@ -460,15 +476,16 @@ function Workspace({ name }: { name: string }) {
                 className={`am-badge ${authorized ? "am-badge--green" : "am-badge--amber"}`}
               >
                 <Icon name="shield" size={12} />
-                {authorized
+                {personal ? "Private admin access" : authorized
                   ? "Authorization verified"
                   : "Authorization required"}
               </span>
             </div>
-            <h2>You're in control.</h2>
+            <h2>{personal ? "Your private workflow." : "You're in control."}</h2>
             <p className="am-muted">
-              Review your mail. Approve each action. Nothing authenticates
-              automatically.
+              {personal
+                ? "Request your sign-in email, then choose Verify & Apply. Activation follows only after the provider confirms verification."
+                : "Review your mail. Approve each action. Nothing authenticates automatically."}
             </p>
             <ol className="am-steps">
               {steps.map((step, index) => (
@@ -531,16 +548,25 @@ function Workspace({ name }: { name: string }) {
                 icon="mail"
                 disabled={
                   !workflow ||
+                  operating ||
                   !can("magiclink:send") ||
                   (!resend && !["awaiting_email", "awaiting_approval"].includes(
                     workflow.status,
                   ))
                 }
-                onClick={() => approve("send")}
+                onClick={() => personal && !resend ? void runPrivate("send") : approve("send")}
               >
                 {resend ? "Request another email" : "Request magic link"}
               </Button>
-              <Button
+              {personal ? <Button
+                size="sm" icon="key" loading={operating}
+                disabled={!workflow || !can("account:verify") || !can("license:apply") ||
+                  !["awaiting_email", "awaiting_approval", "verified"].includes(workflow.status) ||
+                  (workflow.status !== "verified" && !inbox.messages.length)}
+                onClick={() => void runPrivate("verify-and-apply")}
+              >
+                Verify &amp; Apply
+              </Button> : <Button
                 size="sm"
                 icon="key"
                 disabled={
@@ -551,11 +577,16 @@ function Workspace({ name }: { name: string }) {
                 onClick={() => approve("apply")}
               >
                 Approve activation
-              </Button>
+              </Button>}
             </div>
             {service?.actions && !service.actions.send.ready && (
               <p className="am-help" role="status">
                 {service.actions.send.reason}
+              </p>
+            )}
+            {personal && service?.actions && (!service.actions.verify.ready || !service.actions.apply.ready) && (
+              <p className="am-help" role="status">
+                {!service.actions.verify.ready ? service.actions.verify.reason : service.actions.apply.reason}
               </p>
             )}
             {service?.authorization.reference && (
@@ -837,7 +868,7 @@ function Workspace({ name }: { name: string }) {
                           >
                             Copy link
                           </Button>
-                          {link.authentication && (
+                          {link.authentication && !personal && (
                             <Button
                               size="sm"
                               icon="shield"

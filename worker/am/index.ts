@@ -26,6 +26,7 @@ import {
   readGrant,
   receiptCodec,
   requireGrant,
+  privateLinkPolicy,
   type AmEnv,
 } from "./authorization";
 
@@ -35,6 +36,7 @@ interface Context extends AmEnv {
 }
 interface Viewer {
   id: string;
+  isAdmin?: boolean;
 }
 const idSchema = z.uuid();
 const pageSchema = z.object({
@@ -287,6 +289,7 @@ async function runOperation(
   account: AmAccount,
   workflowId: string,
   operation: AmOperation,
+  personal = false,
 ) {
   const input = await body(request);
   const consent = (
@@ -309,7 +312,7 @@ async function runOperation(
   if (!workflow)
     throw new AmError(404, "workflow_not_found", "Workflow not found.");
   const grant =
-    operation === "send"
+    operation === "send" || personal
       ? null
       : await requireGrant(env, operation, account.email);
   const contract = amContract(env.AM_API_CONTRACT);
@@ -340,8 +343,7 @@ async function runOperation(
       if (
         candidate.authentication &&
         (await sha256(candidate.url)) === parsed.link_sha256 &&
-        grant &&
-        permittedLink(candidate.url, detail.sender, grant)
+        permittedLink(candidate.url, detail.sender, personal ? privateLinkPolicy : grant!)
       ) {
         link = candidate.url;
         break;
@@ -512,6 +514,12 @@ export async function handleAm(
           reference: null,
         };
       }
+      if (user.isAdmin) authorization = {
+        valid: true,
+        scopes: ["magiclink:send", "account:verify", "license:apply"],
+        reason: "Private administrator workflow",
+        reference: null,
+      };
       let mail: ReturnType<typeof mailContract> = {};
       let provider = false;
       let contract: ReturnType<typeof amContract> | null = null;
@@ -570,7 +578,7 @@ export async function handleAm(
           reason:
             operation === "send"
               ? "Ready to request a sign-in email with your approval."
-              : "Ready after your explicit approval.",
+              : user.isAdmin ? "Ready for your private administrator workflow." : "Ready after your explicit approval.",
         };
       };
       return reply({
@@ -579,6 +587,7 @@ export async function handleAm(
         inbox_adapter: !!mail.inbox,
         detail_adapter: !!mail.message,
         authorization,
+        private_admin: user.isAdmin === true,
         provider_contract: provider,
         actions: {
           send: actionReady("send"),
@@ -692,6 +701,50 @@ export async function handleAm(
         message: await ownedMessage(env, db, account, msg[1]),
       });
     }
+    const combined = /^workflows\/([^/]+)\/verify-and-apply$/.exec(action);
+    if (combined && request.method === "POST") {
+      if (!user.isAdmin)
+        throw new AmError(403, "admin_required", "This private workflow is available only to administrators.");
+      await rate(db, user.id, "private_workflow", 3600, 10);
+      if (!idSchema.safeParse(combined[1]).success)
+        throw new AmError(404, "workflow_not_found", "Workflow not found.");
+      const state = await db.prepare("SELECT status FROM am_workflows WHERE id=? AND account_id=?")
+        .bind(combined[1], account.id).first<{ status: string }>();
+      if (!state) throw new AmError(404, "workflow_not_found", "Workflow not found.");
+      if (!["awaiting_email", "awaiting_approval", "verified"].includes(state.status))
+        throw new AmError(409, "workflow_state", "This workflow cannot continue in its current state.");
+      const contract = amContract(env.AM_API_CONTRACT);
+      if (!contract.operations.verify?.receipt || !contract.operations.apply ||
+        !Object.values(contract.operations.apply.body).includes("receipt"))
+        throw new AmError(503, "provider_step_not_configured", "Verification token and activation formats must be configured first.");
+      await receiptCodec(env, combined[1]);
+      const input: Record<string, unknown> = { consent: true, owns_account: true };
+      if (state.status !== "verified") {
+        const rows = await db.prepare("SELECT id FROM am_messages WHERE account_id=? ORDER BY received_at DESC,id DESC LIMIT 10")
+          .bind(account.id).all<{ id: string }>();
+        for (const row of rows.results) {
+          const detail = await ownedMessage(env, db, account, row.id);
+          const links = detail.links.filter(link => link.authentication && permittedLink(link.url, detail.sender, privateLinkPolicy));
+          if (links.length > 1)
+            throw new AmError(409, "link_ambiguous", "This message contains multiple authentication links. Review the message before continuing.");
+          if (links.length === 1) {
+            input.message_id = row.id;
+            input.link_sha256 = await sha256(links[0].url);
+            break;
+          }
+        }
+        if (!input.message_id)
+          throw new AmError(409, "magic_link_missing", "No Alight sign-in link was found in this mailbox. Refresh the inbox first.");
+      }
+      const internal = () => new Request(request.url, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
+      });
+      if (state.status !== "verified") {
+        const verified = await runOperation(internal(), env, db, user.id, account, combined[1], "verify", true);
+        if (!verified.ok) return verified;
+      }
+      return await runOperation(internal(), env, db, user.id, account, combined[1], "apply", true);
+    }
     const workflow = /^workflows\/([^/]+)\/(send|verify|apply)$/.exec(action);
     if (workflow && request.method === "POST")
       return await runOperation(
@@ -702,6 +755,7 @@ export async function handleAm(
         account,
         workflow[1],
         workflow[2] as AmOperation,
+        user.isAdmin === true,
       );
     throw new AmError(404, "not_found", "Not found.");
   } catch (error) {
