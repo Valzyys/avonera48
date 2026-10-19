@@ -34,6 +34,7 @@
  */
 
 import { handleAdmin } from "./admin";
+import { handleAm, type AmEnv } from "./am";
 import { handleComments } from "./comments";
 import { handleIntegration, handleLink, type LinkEnv } from "./link";
 import { ensureSchema } from "./db";
@@ -42,7 +43,7 @@ import { partnerCall, partnerReady, type PartnerEnv, type PartnerSession, type P
 import { PlaybackError, openProxied, roomMedia } from "./roomMedia";
 import { accessTo, handleShop, isAdmin, type ShopEnv } from "./shop";
 
-export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv {
+export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv, AmEnv {
   AUTH?: KVNamespace;
 }
 
@@ -410,7 +411,7 @@ const forbidden = () => fail(403, "forbidden", "Cross-site requests are not allo
 /** Handles the members' API; returns null for other paths. */
 export async function handleAuth(request: Request, env: AuthEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
-  const ours = ["/api/auth/", "/api/room", "/api/shop/", "/api/admin/", "/api/avatar/", "/api/link/", "/api/integrations/jkt48connect/"].some((p) => path.startsWith(p));
+  const ours = ["/api/auth/", "/api/am/", "/api/room", "/api/shop/", "/api/admin/", "/api/avatar/", "/api/link/", "/api/integrations/jkt48connect/"].some((p) => path.startsWith(p));
   if (!ours) return null;
   const kv = env.AUTH;
   if (!kv) return fail(503, "not_configured", "Accounts are not set up on this server yet.");
@@ -437,6 +438,7 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   const user = await currentUser(request, kv);
   if (method === "GET" && path === "/api/auth/me") return reply({ ok: true, user: user ? publicUser(user, env) : null });
   if (!user) return fail(401, "unauthenticated", "Sign in first.");
+  if (path.startsWith("/api/am/")) return handleAm(request, env, user, url);
 
   // JSON posts must be same-origin JSON; uploads and deletes check the origin.
   const origin = request.headers.get("origin");

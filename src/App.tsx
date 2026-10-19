@@ -16,6 +16,7 @@ import { RouteError } from "@/pages/site/RouteError";
 const page = (load: () => Promise<{ default: React.ComponentType }>) => async () => ({ Component: (await load()).default });
 
 const router = createBrowserRouter([
+  { path: "am", errorElement: <RouteError />, lazy: page(() => import("@/pages/am/AmPage")) },
   // Sign-in pages are full screen, outside the site chrome.
   { path: "login", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).LoginPage }) },
   { path: "register", errorElement: <RouteError />, lazy: async () => ({ Component: (await import("@/pages/auth/AuthPage")).RegisterPage }) },

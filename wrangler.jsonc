@@ -33,7 +33,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_id": "a77ae33d-c841-497c-b24a-b3d9dcbb9a22"
+      "database_id": "a77ae33d-c841-497c-b24a-b3d9dcbb9a22",
+      "migrations_dir": "migrations"
     }
   ]
 }

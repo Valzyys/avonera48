@@ -1,0 +1,303 @@
+import { z } from "zod";
+import type { AmDomain, AmMessageDetail } from "../../shared/am";
+import {
+  AmError,
+  at,
+  scalar,
+  timestamp,
+  type MailContract,
+  type AmContract,
+  type AmOperation,
+} from "./contracts";
+import { extractContent, metadataPreview } from "./content";
+
+const MAIL = "https://tmailcloud.my.id";
+const AM = "https://www.amgratis.my.id/api/v1";
+const domainName = z
+  .string()
+  .toLowerCase()
+  .regex(
+    /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
+  );
+export { domainName };
+/** Fixed-origin requests only; redirects are never followed with credentials. */
+export async function providerRequest(
+  service: "mail" | "am",
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
+  const method = init.method ?? "GET";
+  const retries = method === "GET" ? 2 : 0;
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${service === "mail" ? MAIL : AM}${path}`, {
+        ...init,
+        redirect: "error",
+        signal: AbortSignal.timeout(8000),
+        headers: { accept: "application/json", ...init.headers },
+      });
+    } catch {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
+        continue;
+      }
+      throw new AmError(
+        502,
+        "provider_unreachable",
+        "The provider could not be reached. A write request may have been accepted; check its status before retrying.",
+      );
+    }
+    if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+      await res.body?.cancel();
+      await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
+      continue;
+    }
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new AmError(
+        res.status === 429 ? 429 : 502,
+        "provider_rejected",
+        "The provider rejected this request. Please try again later.",
+      );
+    }
+    if (!res.body)
+      throw new AmError(
+        502,
+        "provider_empty",
+        "The provider returned an empty response.",
+      );
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > 2_000_000) {
+          await reader.cancel();
+          throw new AmError(
+            502,
+            "provider_too_large",
+            "The provider response is too large.",
+          );
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const part of chunks) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    try {
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      throw new AmError(
+        502,
+        "provider_invalid_json",
+        "The provider did not return valid JSON.",
+      );
+    }
+  }
+}
+const domainsSchema = z.object({
+  success: z.literal(true),
+  domains: z
+    .array(z.object({ name: domainName, is_active: z.boolean() }))
+    .max(500),
+});
+export async function domains(): Promise<AmDomain[]> {
+  const parsed = domainsSchema.safeParse(
+    await providerRequest("mail", "/api/domains"),
+  );
+  if (!parsed.success)
+    throw new AmError(
+      502,
+      "domains_shape_changed",
+      "The domain list does not match the documented provider response.",
+    );
+  return [
+    ...new Map(
+      parsed.data.domains.filter((d) => d.is_active).map((d) => [d.name, d]),
+    ).values(),
+  ];
+}
+export async function generateEmail(domain: string) {
+  const username = `am_${[...crypto.getRandomValues(new Uint8Array(16))].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+  const raw = await providerRequest("mail", "/api/email/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ domain, username }),
+  });
+  const parsed = z
+    .object({
+      success: z.literal(true),
+      inbox: z.object({ address: z.email().max(320), domain: domainName }),
+    })
+    .safeParse(raw);
+  if (
+    !parsed.success ||
+    parsed.data.inbox.domain !== domain ||
+    parsed.data.inbox.address.toLowerCase() !== `${username}@${domain}`
+  )
+    throw new AmError(
+      502,
+      "generated_address_mismatch",
+      "The provider did not return the requested mailbox address.",
+    );
+  return parsed.data.inbox.address.toLowerCase();
+}
+function requireSuccess(
+  raw: unknown,
+  check?: { path: string; value: string | boolean | number },
+) {
+  if (check && at(raw, check.path) !== check.value)
+    throw new AmError(
+      502,
+      "provider_unsuccessful",
+      "The provider did not confirm this request.",
+    );
+}
+export async function inbox(address: string, contract: MailContract) {
+  const config = contract.inbox;
+  if (!config)
+    throw new AmError(
+      503,
+      "inbox_adapter_required",
+      "The inbox response mapping has not been configured. Your mailbox is saved; try again after setup.",
+    );
+  const raw = await providerRequest(
+    "mail",
+    `/api/email/inbox/${encodeURIComponent(address)}`,
+  );
+  requireSuccess(raw, config.success);
+  const rows = at(raw, config.items);
+  if (!Array.isArray(rows) || rows.length > 500)
+    throw new AmError(
+      502,
+      "provider_shape_changed",
+      "The inbox list does not match the configured response mapping.",
+    );
+  const seen = new Set<string>();
+  return rows
+    .map((row) => ({
+      provider_message_id: scalar(at(row, config.fields.id), 200, true),
+      sender: scalar(at(row, config.fields.sender), 500, true),
+      subject: metadataPreview(scalar(at(row, config.fields.subject), 500)),
+      preview: metadataPreview(
+        scalar(
+          config.fields.preview ? at(row, config.fields.preview) : "",
+          3000,
+        ),
+      ),
+      received_at: timestamp(
+        config.fields.received_at ? at(row, config.fields.received_at) : null,
+        config.fields.received_at_format,
+      ),
+    }))
+    .filter((row) => {
+      if (seen.has(row.provider_message_id)) return false;
+      seen.add(row.provider_message_id);
+      return true;
+    });
+}
+export async function message(
+  id: string,
+  contract: MailContract,
+): Promise<AmMessageDetail> {
+  if ([".", ".."].includes(id))
+    throw new AmError(
+      502,
+      "message_identity_invalid",
+      "The provider message identifier is invalid.",
+    );
+  const config = contract.message;
+  if (!config)
+    throw new AmError(
+      503,
+      "message_adapter_required",
+      "The message response mapping has not been configured.",
+    );
+  const raw = await providerRequest(
+    "mail",
+    `/api/email/message/${encodeURIComponent(id)}`,
+  );
+  requireSuccess(raw, config.success);
+  const row = at(raw, config.item);
+  const html = config.html
+    ? scalar(at(row, config.html), 1_000_000) || null
+    : null;
+  const text = config.text
+    ? scalar(at(row, config.text), 1_000_000) || null
+    : null;
+  const sender = scalar(at(row, config.fields.sender), 500, true);
+  const sourceId = scalar(at(row, config.fields.id), 200, true);
+  if (sourceId !== id)
+    throw new AmError(
+      502,
+      "message_identity_mismatch",
+      "The provider returned a different message.",
+    );
+  return {
+    id,
+    sender,
+    subject: scalar(at(row, config.fields.subject), 500),
+    received_at: timestamp(
+      config.fields.received_at ? at(row, config.fields.received_at) : null,
+      config.fields.received_at_format,
+    ),
+    html,
+    text,
+    raw: config.raw ? scalar(at(row, config.raw), 1_000_000) || null : null,
+    ...extractContent(html, text, sender),
+  };
+}
+const endpoints: Record<AmOperation, string> = {
+  send: "/send-magiclink",
+  verify: "/verify-account",
+  apply: "/apply-premium",
+};
+export async function amRequest(
+  operation: AmOperation,
+  contract: AmContract,
+  apiKey: string,
+  values: { email: string; magic_link?: string; receipt?: string },
+) {
+  const config = contract.operations[operation];
+  const body: Record<string, string> = {};
+  for (const [key, source] of Object.entries(config.body)) {
+    const value = values[source];
+    if (!value)
+      throw new AmError(
+        409,
+        "provider_input_missing",
+        "A confirmed result from the previous step is required.",
+      );
+    body[key] = value;
+  }
+  if (!Object.values(config.body).includes("email"))
+    throw new AmError(
+      503,
+      "provider_contract_invalid",
+      "The provider contract must bind this operation to the account email.",
+    );
+  const raw = await providerRequest("am", endpoints[operation], {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [contract.auth_header]: `${contract.auth_prefix}${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  requireSuccess(raw, config.success);
+  return {
+    receipt: config.receipt
+      ? scalar(at(raw, config.receipt), 10000, true)
+      : null,
+  };
+}

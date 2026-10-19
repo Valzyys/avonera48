@@ -38,6 +38,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean; admin?: b
   { to: "/dashboard/schedule", label: "Shows", icon: "ticket" },
   { to: "/dashboard/membership", label: "Membership", icon: "bolt" },
   { to: "/dashboard/transactions", label: "Transactions", icon: "list" },
+  { to: "/am", label: "AM Dashboard", icon: "mail" },
   { to: "/dashboard/profile", label: "Profile", icon: "user" },
   { to: "/dashboard/admin", label: "Admin", icon: "shield", admin: true },
 ];
