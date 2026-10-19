@@ -201,6 +201,34 @@ mode uses the provider's API and does not assert that the website independently
 validated the provider's licensing arrangements. It does not make these actions
 available to ordinary users.
 
+### Optional one-button automatic admin flow
+
+**Generate Account** continues to use the manual-login-first flow above.
+Administrators also have **Generate & Activate**, which sends
+`{domain, automatic:true}` to the existing account-generation endpoint.
+The server checks admin identity, the API key, encryption secret, all provider
+operations and inbox adapters before generating an address. Ordinary users
+cannot enable automation through JSON fields or on an existing manual workflow.
+
+The explicit automatic choice is stored in `am_automatic_workflows` (additive
+migration `0003_am_automatic_workflows.sql`, also initialized automatically).
+This is separate from manual-login confirmation; automatic mode never fabricates
+a user's confirmation that they logged into the Alight Motion app.
+
+The browser starts the opted-in workflow for the selected account: request a
+magic link, wait for a fresh inbox message, then call Verify & Apply. Provider
+verification must return a token before activation, and activation must pass
+its documented success checks. No authentication URL is followed or clicked.
+Tokens remain server-side and encrypted. History persists the selected mode and
+workflow state, allowing active automatic work to resume when reopened.
+
+Keep the account selected and the dashboard tab visible. Inbox polling and new
+automatic steps pause in hidden tabs; closing the dashboard does not run a
+background queue. A provider call already in flight finishes safely. HTTP 429
+waits for the server cooldown, while failed, uncertain, completed, or ambiguous
+write outcomes are never automatically replayed. Manual recovery controls remain
+available for stopped workflows; errors do not claim that activation succeeded.
+
 ### Optional delegated-user authorization (existing flow)
 
 The earlier signed-grant integration remains available for delegated non-admin
@@ -239,7 +267,7 @@ cannot grant access.
 | GET `/api/am/status`                                     | Database/adapter/authorization readiness, no credentials    |
 | GET `/api/am/domains`                                    | Actual active domains                                       |
 | GET `/api/am/accounts?limit=&cursor=`                    | Server-paginated owned history                              |
-| POST `/api/am/accounts`                                  | Validate active domain, reserve quota, generate and persist |
+| POST `/api/am/accounts`                                  | Validate active domain, reserve quota, generate and persist; admin-only `automatic:true` opt-in |
 | GET `/api/am/accounts/:id?limit=&cursor=`                | Owned account, recent workflows, paginated activity         |
 | DELETE `/api/am/accounts/:id`                            | Remove owned history; keep email tombstone                  |
 | POST `/api/am/accounts/:id/sync`                         | Provider inbox sync and metadata upsert                     |

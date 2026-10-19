@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { am, digest } from "@/features/am/api";
 import { emailDocument } from "@/features/am/sanitize";
 import { useInbox } from "@/features/am/useInbox";
+import { useAutomaticWorkflow } from "@/features/am/useAutomaticWorkflow";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import type {
   AmAccount,
@@ -102,10 +103,13 @@ function Workspace({ name }: { name: string }) {
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
   const personal = service?.private_admin === true;
+  const automatic = !!workflow && !!inbox.detail?.automatic_workflows?.includes(workflow.id);
+  const auto = useAutomaticWorkflow(personal && automatic, selected, inbox.detail, inbox.messages, inbox.refresh);
+  const manual = personal && !automatic;
   const loginConfirmation = inbox.detail?.login_confirmations?.find(c => c.workflow_id === workflow?.id);
   const loginConfirmed = !!loginConfirmation;
-  const magicRequested = !!loginConfirmation && !!inbox.detail?.activity.some(event =>
-    event.action === "send_confirmed" && event.created_at >= loginConfirmation.confirmed_at);
+  const magicRequested = !!inbox.detail?.activity.some(event =>
+    event.action === "send_confirmed" && event.created_at >= (automatic ? workflow?.created_at ?? "" : loginConfirmation?.confirmed_at ?? "9999"));
   const resend = workflow?.status === "uncertain" && ["send", "verify"].includes(workflow.current_step);
   const restartEmail = workflow?.status === "failed" && ["send", "verify"].includes(workflow.current_step);
   const frame = useMemo(
@@ -192,17 +196,17 @@ function Workspace({ name }: { name: string }) {
       controller.abort();
     };
   }, [selected, messageId]);
-  const generate = async () => {
+  const generate = async (automatic = false) => {
     setGenerating(true);
     setPageError(null);
     try {
-      const result = await am.create(domain || undefined);
+      const result = await am.create(domain || undefined, automatic);
       setAccounts((old) => [
         result.account,
         ...old.filter((a) => a.id !== result.account.id),
       ]);
       setSelected(result.account.id);
-      toast.success("Your mailbox is ready");
+      toast.success(automatic ? "Mailbox created. Automatic workflow will continue while this dashboard is open." : "Your mailbox is ready");
     } catch (e) {
       setPageError(errorText(e));
     } finally {
@@ -324,14 +328,14 @@ function Workspace({ name }: { name: string }) {
             : "license:apply",
       )
     : false;
-  const steps = personal
+  const steps = manual
     ? ["Login in Alight", "Confirm email", "New magic link", "Verify & Apply"]
     : ["Mailbox", "Magic link", "Verification", "License"];
   const progress = !current
     ? -1
     : workflow?.status === "completed"
       ? 3
-      : personal
+      : manual
         ? !loginConfirmed ? inbox.messages.length ? 1 : 0
           : magicRequested || workflow?.status === "verified" ? 3 : 2
       : workflow?.status === "verified"
@@ -387,6 +391,7 @@ function Workspace({ name }: { name: string }) {
             <Button size="sm" variant="ghost" onClick={() => void load()}>
               Retry
             </Button>
+
           </div>
         )}
         {service && !service.inbox_adapter && (
@@ -463,6 +468,16 @@ function Workspace({ name }: { name: string }) {
             >
               Generate Account
             </Button>
+            {personal && <Button
+              className="am-generate" variant="primary" icon="pulse" size="lg"
+              loading={generating || auto.running}
+              disabled={loading || !domain || !service?.database || !service.inbox_adapter || !service.detail_adapter ||
+                !can("magiclink:send") || !can("account:verify") || !can("license:apply")}
+              onClick={() => void generate(true)}
+            >
+              Generate &amp; Activate
+            </Button>}
+            {personal && <p className="am-help">Generate Account keeps the manual flow. Generate &amp; Activate sends, waits for email, verifies, and applies automatically while this dashboard is open.</p>}
             <p className="am-help">
               <Icon name="shield" size={13} /> Private to your Avonera48 account
               · up to {service?.max_accounts ?? "—"} saved accounts
@@ -505,14 +520,16 @@ function Workspace({ name }: { name: string }) {
                 className={`am-badge ${authorized ? "am-badge--green" : "am-badge--amber"}`}
               >
                 <Icon name="shield" size={12} />
-                {personal ? "Private admin access" : authorized
+                {automatic ? "Automatic admin workflow" : personal ? "Private admin access" : authorized
                   ? "Authorization verified"
                   : "Authorization required"}
               </span>
             </div>
             <h2>{personal ? "Your private workflow." : "You're in control."}</h2>
             <p className="am-muted">
-              {personal
+              {automatic
+                ? "Automatic flow: generate email, request magic link, wait for its email, then verify and apply. Failed or uncertain writes stop the flow; rate limits pause it."
+                : personal
                 ? "First sign in to Alight Motion with your generated email. Open the confirmation link from the inbox and confirm you completed login. Only then request a new magic link and choose Verify & Apply."
                 : "Review your mail. Approve each action. Nothing authenticates automatically."}
             </p>
@@ -540,7 +557,7 @@ function Workspace({ name }: { name: string }) {
                 </li>
               ))}
             </ol>
-            {personal && !loginConfirmed && (
+            {manual && !loginConfirmed && (
               <div className="am-permission">
                 <Icon name="info" size={17} />
                 <p>
@@ -551,12 +568,13 @@ function Workspace({ name }: { name: string }) {
                 </p>
               </div>
             )}
-            {personal && loginConfirmed && <p className="am-help">Manual login confirmed by you. Request a new magic link for the next step.</p>}
+            {manual && loginConfirmed && <p className="am-help">Manual login confirmed by you. Request a new magic link for the next step.</p>}
+            {auto.error && automatic && <p className="am-inline-error" role="alert">{auto.error}</p>}
             <div className="am-workflow-status">
               <Icon name="pulse" size={17} />
               <div>
                 <strong>
-                  {personal && workflow && !loginConfirmed ? "Manual login required" : workflow
+                  {manual && workflow && !loginConfirmed ? "Manual login required" : workflow
                     ? readable(workflow.status)
                     : "Create or select an account"}
                 </strong>
@@ -590,7 +608,7 @@ function Workspace({ name }: { name: string }) {
                 disabled={
                   !workflow ||
                   operating ||
-                  (personal && !loginConfirmed) ||
+                  (manual && !loginConfirmed) || auto.running ||
                   !can("magiclink:send") ||
                   (!resend && !restartEmail && !["awaiting_email", "awaiting_approval"].includes(
                     workflow.status,
@@ -602,7 +620,7 @@ function Workspace({ name }: { name: string }) {
               </Button>
               {personal ? <Button
                 size="sm" icon="key" loading={operating}
-                disabled={!workflow || !loginConfirmed || !can("account:verify") || !can("license:apply") ||
+                disabled={!workflow || (manual && !loginConfirmed) || auto.running || !can("account:verify") || !can("license:apply") ||
                   !["awaiting_email", "awaiting_approval", "verified"].includes(workflow.status) ||
                   (workflow.status !== "verified" && (!magicRequested || !inbox.messages.some(m => m.id !== loginConfirmation?.message_id)))}
                 onClick={() => void runPrivate("verify-and-apply")}
@@ -910,7 +928,7 @@ function Workspace({ name }: { name: string }) {
                           >
                             Copy link
                           </Button>
-                          {personal && !loginConfirmed && link.authentication &&
+                          {manual && !loginConfirmed && link.authentication &&
                             ["alightcreative.com", "login.alightcreative.com", "alight-creative.firebaseapp.com"].includes(new URL(link.url).hostname) && (
                             <a className="btn btn--secondary btn--sm" href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
                               Open confirmation link
@@ -938,7 +956,7 @@ function Workspace({ name }: { name: string }) {
                     ))}
                   </div>
                 )}
-                {personal && !loginConfirmed && message.links.some(link => link.authentication) && (
+                {manual && !loginConfirmed && message.links.some(link => link.authentication) && (
                   <div className="am-login-confirmation">
                     <label className="am-check">
                       <input type="checkbox" checked={manualLoginDone} onChange={e => setManualLoginDone(e.target.checked)} />

@@ -70,6 +70,7 @@ export interface AmService {
   max_accounts: number;
 }
 export interface AmAccountDetail {
+  automatic_workflows?: string[];
   login_confirmations?: { workflow_id: string; message_id: string; confirmed_at: string }[];
   account: AmAccount;
   workflows: AmWorkflow[];

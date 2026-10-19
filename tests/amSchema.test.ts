@@ -53,7 +53,7 @@ describe("AM first-use database setup", () => {
       .bind(id, viewer.id, `${id}@bussiness.biz.id`, date, date)
       .run();
     const sql = (
-      (await Promise.all(["0001_am_dashboard.sql", "0002_am_manual_login.sql"].map(name =>
+      (await Promise.all(["0001_am_dashboard.sql", "0002_am_manual_login.sql", "0003_am_automatic_workflows.sql"].map(name =>
         readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8")))).join("\n")
     )
       .replace(/^--.*$/gm, "")

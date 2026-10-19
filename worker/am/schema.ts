@@ -13,6 +13,8 @@ export const AM_SCHEMA: readonly string[] = [
   "CREATE TABLE IF NOT EXISTS am_rate_limits (\n  user_id TEXT NOT NULL,\n  action TEXT NOT NULL,\n  window_start INTEGER NOT NULL,\n  hits INTEGER NOT NULL CHECK(hits > 0),\n  PRIMARY KEY(user_id, action, window_start)\n)",
   "CREATE TABLE IF NOT EXISTS am_login_confirmations (workflow_id TEXT PRIMARY KEY REFERENCES am_workflows(id) ON DELETE CASCADE, account_id TEXT NOT NULL REFERENCES am_accounts(id) ON DELETE CASCADE, message_id TEXT NOT NULL REFERENCES am_messages(id) ON DELETE CASCADE, confirmed_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS am_login_confirmations_account ON am_login_confirmations(account_id)",
+  "CREATE TABLE IF NOT EXISTS am_automatic_workflows (workflow_id TEXT PRIMARY KEY REFERENCES am_workflows(id) ON DELETE CASCADE, account_id TEXT NOT NULL REFERENCES am_accounts(id) ON DELETE CASCADE, created_at TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS am_automatic_workflows_account ON am_automatic_workflows(account_id)",
 ];
 
 // Scope readiness to the binding, share concurrent initialization, retry failures.

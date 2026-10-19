@@ -151,13 +151,23 @@ async function createAccount(
   env: Context,
   db: D1Database,
   user: string,
+  personal = false,
 ) {
   const parsed = z
-    .object({ domain: domainName.optional() })
+    .object({ domain: domainName.optional(), automatic: z.boolean().optional() })
     .strict()
     .safeParse(await body(request));
   if (!parsed.success)
     throw new AmError(400, "invalid_domain", "Choose an active email domain.");
+  if (parsed.data.automatic) {
+    if (!personal) throw new AmError(403, "admin_required", "Automatic workflows are available only to administrators.");
+    const contract = amContract(env.AM_API_CONTRACT);
+    const mail = mailContract(env.TMAIL_RESPONSE_MAP);
+    if (!env.AM_API_KEY || !contract.operations.send || !contract.operations.verify?.receipt ||
+      !contract.operations.apply || !Object.values(contract.operations.apply.body).includes("receipt") || !mail.inbox || !mail.message)
+      throw new AmError(503, "automatic_setup_required", "Configure the provider key, inbox, verification and activation services before starting automatic generation.");
+    await receiptCodec(env, "automatic-preflight");
+  }
   await rate(db, user, "generate", 3600, 10);
   const active = await domains();
   const preferred = active.find((d) => d.name === "bussiness.biz.id");
@@ -206,6 +216,7 @@ async function createAccount(
           "INSERT INTO am_activity_logs(id, account_id, action, status, created_at) VALUES (?, ?, 'account_generated', 'completed', ?)",
         )
         .bind(crypto.randomUUID(), id, date),
+      ...(parsed.data.automatic ? [db.prepare("INSERT INTO am_automatic_workflows VALUES(?,?,?)").bind(workflow, id, date)] : []),
     ]);
     return reply({ ok: true, account: await owned(db, user, id) }, 201);
   } catch (error) {
@@ -467,12 +478,23 @@ async function runOperation(
 }
 
 async function requireManualLogin(db: D1Database, accountId: string, workflowId: string) {
+  if (await automaticWorkflow(db, accountId, workflowId)) return;
   const confirmed = await db.prepare("SELECT workflow_id FROM am_login_confirmations WHERE workflow_id=? AND account_id=?")
     .bind(workflowId, accountId).first();
   if (!confirmed) throw new AmError(409, "manual_login_required",
     "Sign in to Alight Motion using this email, open the confirmation link from your inbox, then confirm that you completed login before requesting a new magic link.");
 }
+async function automaticWorkflow(db: D1Database, accountId: string, workflowId: string) {
+  return !!await db.prepare("SELECT workflow_id FROM am_automatic_workflows WHERE workflow_id=? AND account_id=?")
+    .bind(workflowId, accountId).first();
+}
 async function requireNewMagicLink(db: D1Database, accountId: string, workflowId: string) {
+  if (await automaticWorkflow(db, accountId, workflowId)) {
+    const sent = await db.prepare("SELECT l.id FROM am_activity_logs l JOIN am_workflows w ON w.account_id=l.account_id WHERE w.id=? AND w.account_id=? AND l.action='send_confirmed' AND l.created_at>=w.created_at LIMIT 1")
+      .bind(workflowId, accountId).first();
+    if (!sent) throw new AmError(409, "new_magic_link_required", "Wait for the automatic magic-link request to complete before verification.");
+    return;
+  }
   const sent = await db.prepare("SELECT l.id FROM am_activity_logs l JOIN am_login_confirmations c ON c.account_id=l.account_id WHERE c.workflow_id=? AND c.account_id=? AND l.action='send_confirmed' AND l.created_at>=c.confirmed_at LIMIT 1")
     .bind(workflowId, accountId).first();
   if (!sent) throw new AmError(409, "new_magic_link_required", "After confirming manual login, request a new magic link and wait for its email before verification.");
@@ -636,7 +658,7 @@ export async function handleAm(
     }
     if (suffix === "/accounts") {
       if (request.method === "POST")
-        return await createAccount(request, env, db, user.id);
+        return await createAccount(request, env, db, user.id, user.isAdmin === true);
       if (request.method === "GET") {
         await db
           .prepare(
@@ -702,6 +724,8 @@ export async function handleAm(
         workflows: workflows.results,
         login_confirmations: (await db.prepare("SELECT workflow_id,message_id,confirmed_at FROM am_login_confirmations WHERE account_id=?")
           .bind(account.id).all()).results,
+        automatic_workflows: (await db.prepare("SELECT workflow_id FROM am_automatic_workflows WHERE account_id=?")
+          .bind(account.id).all<{ workflow_id: string }>()).results.map(row => row.workflow_id),
         activity: a.items,
         activity_next_cursor: a.next_cursor,
       });

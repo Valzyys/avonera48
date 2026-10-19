@@ -61,10 +61,10 @@ export const am = {
   domains: () => request<{ domains: AmDomain[] }>("/domains"),
   accounts: (cursor?: string | null) =>
     request<AmPage<AmAccount>>(`/accounts${page(cursor)}`),
-  create: (domain?: string) =>
+  create: (domain?: string, automatic = false) =>
     request<{ account: AmAccount }>("/accounts", {
       method: "POST",
-      body: { ...(domain ? { domain } : {}) },
+      body: { ...(domain ? { domain } : {}), ...(automatic ? { automatic: true } : {}) },
     }),
   account: (id: string, cursor?: string | null, signal?: AbortSignal) =>
     request<AmAccountDetail>(`/accounts/${id}${page(cursor)}`, { signal }),

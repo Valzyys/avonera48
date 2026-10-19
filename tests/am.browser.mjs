@@ -9,7 +9,7 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-const id = "11111111-1111-4111-8111-111111111111";
+let id = "11111111-1111-4111-8111-111111111111";
 const messageId = "22222222-2222-4222-8222-222222222222";
 const date = "2026-10-19T01:00:00.000Z";
 const account = {
@@ -33,6 +33,13 @@ let limitedSyncs = 0;
 let manualLoginConfirmed = false;
 let magicRequestedAfterLogin = false;
 let loginConfirmRequests = 0;
+let autoMode = false;
+let autoStatus = "awaiting_email";
+let autoSends = 0;
+let autoVerifications = 0;
+let autoInboxPolls = 0;
+let autoEmailAvailable = false;
+const autoOrder = [];
 let sendRequests = 0;
 let uncertainSend = false;
 let lastSendBody;
@@ -95,6 +102,14 @@ await page.route("**/api/**", async (route) => {
   else if (path === "/api/am/accounts") {
     if (route.request().method() === "POST") {
       generated = true;
+      if (route.request().postDataJSON().automatic) {
+        autoMode = true;
+        id = "77777777-7777-4777-8777-777777777777";
+        account.id = id;
+        account.email = "am_auto@bussiness.biz.id";
+        manualLoginConfirmed = false;
+        magicRequestedAfterLogin = false;
+      }
       data = { account };
     } else data = { items: generated ? [account] : [], next_cursor: null };
   } else if (path.endsWith("/confirm-login")) {
@@ -103,14 +118,17 @@ await page.route("**/api/**", async (route) => {
     data = {};
   } else if (path.endsWith("/verify-and-apply")) {
     combinedRequests++;
+    if (autoMode) { expect(autoEmailAvailable).toBe(true); autoVerifications++; autoOrder.push("verify-and-apply"); autoStatus = "completed"; }
     data = { status: "completed" };
   } else if (path.endsWith("/send")) {
     sendRequests++;
+    if (autoMode) { autoSends++; autoOrder.push("send"); autoStatus = "awaiting_approval"; }
     if (privateAdmin && manualLoginConfirmed) magicRequestedAfterLogin = true;
     lastSendBody = route.request().postDataJSON();
     data = { status: "awaiting_approval" };
   } else if (path.endsWith("/sync")) {
     syncs++;
+    if (autoMode && autoSends && ++autoInboxPolls >= 2) autoEmailAvailable = true;
     data = { synced: 1 };
   } else if (path.endsWith(`/messages/${messageId}`))
     data = {
@@ -134,7 +152,7 @@ await page.route("**/api/**", async (route) => {
     };
   else if (path.endsWith("/messages"))
     data = {
-      items: [
+      items: autoMode ? (autoEmailAvailable ? [{ id: "55555555-5555-4555-8555-555555555555", provider_message_id: "auto-email", sender: "Alight Creative", subject: "Automatic magic link", preview: "New login email", received_at: date }] : []) : [
         ...(magicRequestedAfterLogin ? [{ id: "44444444-4444-4444-8444-444444444444", provider_message_id: "new-message", sender: "Alight Creative", subject: "New magic link", preview: "New email", received_at: date }] : []),
         {
           id: messageId,
@@ -150,19 +168,21 @@ await page.route("**/api/**", async (route) => {
   else if (path === `/api/am/accounts/${id}`)
     data = {
       account,
+      automatic_workflows: autoMode ? ["33333333-3333-4333-8333-333333333333"] : [],
       login_confirmations: manualLoginConfirmed ? [{ workflow_id: "33333333-3333-4333-8333-333333333333", message_id: messageId, confirmed_at: date }] : [],
       workflows: [
         {
           id: "33333333-3333-4333-8333-333333333333",
           account_id: id,
-          status: uncertainSend ? "uncertain" : "awaiting_email",
-          current_step: uncertainSend ? "send" : "mailbox_created",
+          status: autoMode ? autoStatus : uncertainSend ? "uncertain" : "awaiting_email",
+          current_step: autoMode ? (autoStatus === "completed" ? "apply_confirmed" : autoSends ? "send_confirmed" : "mailbox_created") : uncertainSend ? "send" : "mailbox_created",
           error_message: null,
           created_at: date,
           updated_at: date,
         },
       ],
       activity: [
+        ...(autoSends ? [{ id: "auto-send", action: "send_approved", status: "completed", created_at: date }, { id: "auto-send-ok", action: "send_confirmed", status: "completed", created_at: date }] : []),
         ...(magicRequestedAfterLogin ? [{ id: "send-event", action: "send_confirmed", status: "completed", created_at: date }] : []),
         {
           id: "event-test",
@@ -338,6 +358,24 @@ try {
   const beforeRecovery = syncs;
   await page.clock.fastForward(120000);
   await expect.poll(() => syncs).toBeGreaterThan(beforeRecovery);
+  await page.getByRole("button", { name: "Generate & Activate", exact: true }).click();
+  await expect.poll(() => autoSends).toBe(1);
+  expect(autoVerifications).toBe(0);
+  await expect(page.getByRole("button", { name: "Generate & Activate", exact: true })).toBeEnabled();
+  for (let poll = 0; poll < 2; poll++) {
+    await expect(page.getByRole("button", { name: "Refresh inbox", exact: true })).toBeEnabled();
+    const previous = autoInboxPolls;
+    await page.clock.fastForward(6000);
+    await expect.poll(() => autoInboxPolls).toBeGreaterThan(previous);
+  }
+  await expect.poll(() => autoVerifications).toBe(1);
+  await expect(page.getByText("Automatic admin workflow", { exact: true })).toBeVisible();
+  await expect(page.locator(".am-workflow-status strong")).toHaveText("completed");
+  await page.clock.fastForward(30000);
+  expect(autoOrder).toEqual(["send", "verify-and-apply"]);
+  expect(autoSends).toBe(1);
+  expect(loginConfirmRequests).toBe(1);
+  await expect(page.getByRole("button", { name: "Generate Account", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

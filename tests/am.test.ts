@@ -429,12 +429,53 @@ describe("AM authenticated persistence", () => {
 });
 
 describe("AM approved workflows", () => {
+  it("allows explicitly opted-in admin automation without fabricating manual login confirmation", async () => {
+    const admin = { ...user, isAdmin: true };
+    expect((await call("/accounts", "POST", { automatic: true })).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const secret = env.AM_WORKFLOW_SECRET;
+    delete env.AM_WORKFLOW_SECRET;
+    expect((await call("/accounts", "POST", { automatic: true }, admin)).status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+    env.AM_WORKFLOW_SECRET = secret;
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/api/domains")) return Response.json({ success: true, domains: [{ name: "bussiness.biz.id", is_active: true }] });
+      if (String(url).endsWith("/generate")) {
+        const input = JSON.parse(init.body);
+        return Response.json({ success: true, inbox: { address: `${input.username}@${input.domain}`, domain: input.domain, is_permanent: true } });
+      }
+      if (String(url).includes("/inbox/")) return Response.json({ results: [{ key: "auto-message", from: "Alight Creative", title: "Sign in", snippet: "New email", time: new Date(Date.now() + 1000).toISOString() }] });
+      if (String(url).includes("/api/email/message/")) return Response.json(detailPayload("auto-message"));
+      if (String(url).endsWith("/verify-account")) return Response.json({ confirmed: true, receipt: "automatic-session" });
+      return Response.json({ confirmed: true });
+    });
+    const created = await call("/accounts", "POST", { automatic: true }, admin);
+    expect(created.status).toBe(201);
+    const account = (await created.json()).account.id;
+    const details = await (await call(`/accounts/${account}`)).json();
+    const workflow = details.workflows[0].id;
+    expect(details.automatic_workflows).toEqual([workflow]);
+    expect(details.login_confirmations).toEqual([]);
+    const path = `/accounts/${account}/workflows/${workflow}`;
+    expect((await call(`${path}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
+    expect((await call(`${path}/send`, "POST", { consent: true, owns_account: true }, admin)).status).toBe(200);
+    expect((await call(`/accounts/${account}/sync`, "POST", {}, admin)).status).toBe(200);
+    expect((await call(`${path}/verify-and-apply`, "POST", {}, admin)).status).toBe(200);
+    const finished = await (await call(`/accounts/${account}`)).json();
+    expect(finished.workflows[0].status).toBe("completed");
+    expect(finished.login_confirmations).toEqual([]);
+    expect(JSON.stringify(finished)).not.toContain("automatic-session");
+    for (const endpoint of ["send-magiclink", "verify-account", "apply-premium"])
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/${endpoint}`))).toHaveLength(1);
+    expect((await call(`${path}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
+  });
   it("requires manual Alight login confirmation, then a separate fresh magic-link request", async () => {
     const { account, workflow } = await seed();
     const admin = { ...user, isAdmin: true };
     const prefix = `/accounts/${account}/workflows/${workflow}`;
     const consent = { consent: true, owns_account: true };
     expect((await call(`${prefix}/send`, "POST", consent, admin)).status).toBe(409);
+    expect((await call(`${prefix}/send`, "POST", { ...consent, automatic: true }, admin)).status).toBe(409);
     expect((await call(`${prefix}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
     expect(fetchMock).not.toHaveBeenCalled();
     const manual = crypto.randomUUID();
