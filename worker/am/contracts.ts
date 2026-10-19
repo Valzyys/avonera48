@@ -78,10 +78,30 @@ export const mailContractSchema = z
   })
   .strict();
 export type MailContract = z.infer<typeof mailContractSchema>;
+// Field names and millisecond timestamps confirmed by actual TmailCloud responses.
+const documentedMailContract: MailContract = {
+  inbox: {
+    items: "/messages",
+    fields: {
+      id: "/id", sender: "/sender", subject: "/subject",
+      preview: "/body_text", received_at: "/created_at",
+      received_at_format: "unix_milliseconds",
+    },
+    success: { path: "/success", value: true },
+  },
+  message: {
+    item: "/message",
+    fields: {
+      id: "/id", sender: "/sender", subject: "/subject",
+      received_at: "/created_at", received_at_format: "unix_milliseconds",
+    },
+    html: "/body_html", text: "/body_text",
+    success: { path: "/success", value: true },
+  },
+};
 export function mailContract(raw?: string): MailContract {
-  if (!raw) return {};
   try {
-    return mailContractSchema.parse(JSON.parse(raw));
+    return mailContractSchema.parse(raw ? JSON.parse(raw) : documentedMailContract);
   } catch {
     throw new AmError(
       503,

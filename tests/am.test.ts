@@ -327,11 +327,50 @@ describe("AM authenticated persistence", () => {
   });
   it("returns explicit setup errors instead of inventing an inbox schema or empty success", async () => {
     const { account } = await seed();
-    delete env.TMAIL_RESPONSE_MAP;
+    env.TMAIL_RESPONSE_MAP = "{}";
     const result = await call(`/accounts/${account}/sync`, "POST", {});
     expect(result.status).toBe(503);
     expect((await result.json()).error).toBe("inbox_adapter_required");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("syncs the supplied TmailCloud format and reads full messages without a custom mapping", async () => {
+    const { account } = await seed();
+    delete env.TMAIL_RESPONSE_MAP;
+    const status = await (await call("/status")).json();
+    expect(status.inbox_adapter).toBe(true);
+    expect(status.detail_adapter).toBe(true);
+    // Synthetic content in the real supplied shape; never retain live login tokens.
+    const row = {
+      id: "msg_example", sender: "noreply@alight-creative.firebaseapp.com",
+      subject: "Sign in to Alight Creative requested at 2026 October 19 03:20 UTC",
+      body_text: "We received a request to sign in to Alight Creative at 2026 October 19.",
+      body_html: "<p>Hello</p><a href='https://alight-creative.firebaseapp.com/__/auth/links?link=https%3A%2F%2Falightcreative.com%2Fauth_action%2F%3Fmode%3DsignIn%26oobCode%3Dtest-only'>Sign in to Alight Creative</a>",
+      verification_code: "2026", created_at: 1792380020557, is_read: false,
+    };
+    fetchMock.mockImplementation(async (url) => Response.json(
+      String(url).includes("/inbox/")
+        ? { success: true, total: 2, count: 2, messages: [row, { ...row, id: "msg_older", created_at: 1792379746756 }] }
+        : { success: true, message: row },
+    ));
+    for (let attempt = 0; attempt < 2; attempt++)
+      expect((await call(`/accounts/${account}/sync`, "POST", {})).status).toBe(200);
+    const list = await (await call(`/accounts/${account}/messages`)).json();
+    expect(list.items).toHaveLength(2);
+    expect(list.items[0].received_at).toBe(new Date(row.created_at).toISOString());
+    const detail = await (await call(`/accounts/${account}/messages/${list.items[0].id}`)).json();
+    expect(detail.message.html).toBe(row.body_html);
+    expect(detail.message.text).toBe(row.body_text);
+    expect(detail.message.raw).toBeNull();
+    expect(detail.message.otps).toEqual([]);
+    expect(detail.message.alight_candidate).toBe(true);
+    expect(detail.message.links).toHaveLength(1);
+    expect(detail.message.links[0].authentication).toBe(true);
+    const saved = await (await call(`/accounts/${account}`)).json();
+    expect(saved.account.inbox_count).toBe(2);
+    expect(saved.workflows[0].current_step).toBe("email_received");
+    expect(JSON.stringify(saved)).not.toContain("test-only");
+    fetchMock.mockResolvedValueOnce(Response.json({ success: false, messages: [] }));
+    expect((await call(`/accounts/${account}/sync`, "POST", {})).status).toBe(502);
   });
   it("paginates account history deterministically and deletes only owned history", async () => {
     const first = await seed();

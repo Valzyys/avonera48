@@ -43,20 +43,32 @@ Zod. Only active domains returned by `/api/domains` are offered. `bussiness.biz.
 is preselected only when present and active; otherwise the user must select an
 actual alternative. Username entropy is 128 bits from Web Crypto.
 
-The supplied documentation did **not** include JSON responses for inbox or
-message detail. Those structures cannot be inferred from endpoint names.
-AMGratis v1 request fields and success responses have now been documented and
-are built into the backend (see below). There are no guessed production defaults
-or production mock data. Generate and save mailboxes works independently of the
-remaining adapters. Missing mappings return explicit setup errors, never an empty
-inbox or fake success. Live endpoint access was unavailable in the implementation
-environment; the integration tests use explicitly labeled test fixtures only.
+Actual inbox and detail responses have now been supplied. Their field mappings
+are built into the backend, along with the documented AMGratis v1 contract.
+There are no production mock messages. Integration tests use synthetic content
+in those confirmed response shapes; live provider access is unavailable in the
+implementation environment.
 
-### TMAIL_RESPONSE_MAP (Worker variable, JSON)
+### TMAIL_RESPONSE_MAP (optional Worker variable, JSON)
 
-Configure this using captured, redacted provider responses. Paths are RFC 6901
-JSON Pointers: `""` means the whole response/row, `/a/b` means nested fields,
-`~1` escapes `/`, and `~0` escapes `~` in a field name.
+Leave this variable unset for the confirmed TmailCloud format:
+
+- Inbox: `{success:true,messages:[...]}`, with `id`, `sender`, `subject`,
+  `body_text` (preview) and `created_at` (Unix milliseconds).
+- Detail: `{success:true,message:{...}}`, with the same metadata and
+  `body_text` / `body_html` for full content. No raw MIME field was supplied,
+  so raw-message view remains unavailable.
+- Both operations require `success: true`; malformed responses fail explicitly.
+- `verification_code` is not trusted as an OTP: the actual sample contains a
+  year (`2026`). OTPs require verification-code context in the message content.
+- Firebase-hosted Alight sender/link candidates are detected for user review;
+  detection does not establish provider authorization or licensing rights.
+
+Remove a stale `TMAIL_RESPONSE_MAP` override in Cloudflare and redeploy to use
+these defaults. Explicit overrides remain supported for documented format
+changes. Invalid overrides fail instead of silently selecting another schema.
+Paths are RFC 6901 JSON Pointers: `""` means the whole response/row, `/a/b` means
+nested fields, `~1` escapes `/`, and `~0` escapes `~` in a field name.
 
 The accepted configuration has these keys:
 

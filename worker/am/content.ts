@@ -82,7 +82,7 @@ export function extractContent(
         ),
     })),
     alight_candidate:
-      /alight\s*(?:creative|motion)|@(?:[a-z0-9-]+\.)?alightcreative\.com\b/i.test(
+      /alight\s*(?:creative|motion)|@(?:[a-z0-9-]+\.)?alightcreative\.com\b|@alight-creative\.firebaseapp\.com\b/i.test(
         sender,
       ),
   };
