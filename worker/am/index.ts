@@ -116,7 +116,9 @@ async function rate(
     throw new AmError(
       429,
       "rate_limited",
-      "Too many requests. Wait before trying again.",
+      `Avonera48's ${action.startsWith("workflow_") ? action.slice(9) : action.replace(/_/g, " ")} request limit was reached. Try again in ${Math.ceil((window + seconds - Date.now() / 1000) / 60)} minute(s).`,
+      undefined,
+      Math.max(1, Math.ceil(window + seconds - Date.now() / 1000)),
     );
 }
 async function owned(db: D1Database, user: string, id: string) {
@@ -335,7 +337,6 @@ async function runOperation(
     operation !== "send" || config.receipt !== undefined
       ? await receiptCodec(env, workflowId)
       : null;
-  await rate(db, user, "workflow", 3600, 10);
   let link: string | undefined;
   if (operation === "verify") {
     const parsed = verifySchema.parse(input);
@@ -383,6 +384,8 @@ async function runOperation(
     codec && workflow.provider_receipt && operation !== "send"
       ? await codec.open(workflow.provider_receipt)
       : undefined;
+  // Each provider operation has its own budget. Invalid states consume none.
+  await rate(db, user, `workflow_${operation}`, 3600, 10);
   // Compare-and-swap prevents concurrent clicks and cross-step replays.
   const locked = await db
     .prepare(
@@ -431,21 +434,25 @@ async function runOperation(
       ? `${error.message} (${error.code}${error.diagnostic?.upstream_status ? `; HTTP ${error.diagnostic.upstream_status}` : ""})`
       : "The provider outcome could not be confirmed.";
     const declined = error instanceof AmError && error.code === "provider_declined";
-    const guidance = operation === "send" || operation === "verify"
+    const limited = error instanceof AmError && error.status === 429;
+    const guidance = limited
+      ? `The previous workflow state is preserved. Wait ${error instanceof AmError ? error.retryAfterSeconds ?? 60 : 60} seconds before retrying.`
+      : operation === "send" || operation === "verify"
       ? "Check your inbox first. After one minute you may explicitly request another email; the previous request may have succeeded."
       : "Contact support to confirm the outcome before continuing.";
     await db
       .prepare(
-        "UPDATE am_workflows SET status=?, error_message=?, updated_at=? WHERE id=?",
+        "UPDATE am_workflows SET status=?, current_step=?, error_message=?, updated_at=? WHERE id=?",
       )
       .bind(
-        declined ? "failed" : "uncertain",
+        limited ? workflow.status : declined ? "failed" : "uncertain",
+        limited ? workflow.current_step : operation,
         `${detail} ${guidance}`,
         now(),
         workflowId,
       )
       .run();
-    await activity(db, account.id, declined ? `${operation}_declined` : `${operation}_outcome_unknown`, declined ? "failed" : "uncertain");
+    await activity(db, account.id, limited ? `${operation}_rate_limited` : declined ? `${operation}_declined` : `${operation}_outcome_unknown`, limited || declined ? "failed" : "uncertain");
     throw error;
   }
 }
@@ -710,7 +717,7 @@ export async function handleAm(
     if (combined && request.method === "POST") {
       if (!user.isAdmin)
         throw new AmError(403, "admin_required", "This private workflow is available only to administrators.");
-      await rate(db, user.id, "private_workflow", 3600, 10);
+      await rate(db, user.id, "private_workflow", 60, 10);
       if (!idSchema.safeParse(combined[1]).success)
         throw new AmError(404, "workflow_not_found", "Workflow not found.");
       const state = await db.prepare("SELECT status FROM am_workflows WHERE id=? AND account_id=?")
@@ -775,8 +782,10 @@ export async function handleAm(
           error: error.code,
           message: error.message,
           ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+          ...(error.retryAfterSeconds ? { retry_after: error.retryAfterSeconds } : {}),
         },
         error.status,
+        error.retryAfterSeconds ? { "retry-after": String(error.retryAfterSeconds) } : {},
       );
     // Never log thrown provider/SQL objects, which can include mail addresses or tokens.
     return reply(

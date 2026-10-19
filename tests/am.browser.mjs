@@ -28,11 +28,18 @@ let magicReady = false;
 let inboxReady = true;
 let privateAdmin = false;
 let combinedRequests = 0;
+let limitInbox = false;
+let limitedSyncs = 0;
 let sendRequests = 0;
 let uncertainSend = false;
 let lastSendBody;
 await page.route("**/api/**", async (route) => {
   const path = new URL(route.request().url()).pathname;
+  if (path.endsWith("/sync") && limitInbox) {
+    limitedSyncs++;
+    return route.fulfill({ status: 429, contentType: "application/json", headers: { "retry-after": "120" },
+      body: JSON.stringify({ ok: false, error: "provider_rate_limited", message: "TmailCloud has limited requests.", retry_after: 120 }) });
+  }
   if (path === "/api/am/domains" && domainsFail)
     return route.fulfill({
       status: 502,
@@ -297,6 +304,17 @@ try {
   await page.getByRole("button", { name: "Verify & Apply", exact: true }).click();
   await expect.poll(() => combinedRequests).toBe(1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  limitInbox = true;
+  await page.getByRole("button", { name: "Refresh inbox", exact: true }).click();
+  await expect.poll(() => limitedSyncs).toBe(1);
+  await expect(page.getByRole("alert")).toContainText("TmailCloud has limited requests");
+  await page.clock.fastForward(30000);
+  await page.getByRole("button", { name: "Refresh inbox", exact: true }).click();
+  expect(limitedSyncs).toBe(1);
+  limitInbox = false;
+  const beforeRecovery = syncs;
+  await page.clock.fastForward(120000);
+  await expect.poll(() => syncs).toBeGreaterThan(beforeRecovery);
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

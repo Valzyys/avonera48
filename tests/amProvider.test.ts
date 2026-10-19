@@ -46,6 +46,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("AM provider transport", () => {
+  it("does not retry provider 429 responses and preserves Retry-After", async () => {
+    mocked.mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "120" } }));
+    await expect(providerRequest("mail", "/api/domains")).rejects.toMatchObject({
+      status: 429, code: "provider_rate_limited", retryAfterSeconds: 120,
+      diagnostic: { service: "tmailcloud", upstream_status: 429 },
+    });
+    expect(mocked).toHaveBeenCalledTimes(1);
+  });
   it("accepts the actual nested activation response only for a valid linked account", async () => {
     const applied = {
       success: true, email: "owner@example.com",

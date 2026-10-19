@@ -12,7 +12,7 @@ import { readFile } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { handleAm } from "../worker/am";
 import { handleAuth } from "../worker/auth";
-import { readGrant, type AmEnv } from "../worker/am/authorization";
+import { readGrant, receiptCodec, type AmEnv } from "../worker/am/authorization";
 import { sha256 } from "../worker/http";
 
 let mf: Miniflare;
@@ -417,6 +417,37 @@ describe("AM authenticated persistence", () => {
 });
 
 describe("AM approved workflows", () => {
+  it("uses separate step budgets and does not charge invalid workflow states", async () => {
+    const { account, workflow } = await seed();
+    const window = Math.floor(Date.now() / 3600000) * 3600;
+    await db.prepare("INSERT INTO am_rate_limits VALUES ('owner','workflow',?,10)").bind(window).run();
+    await db.prepare("INSERT INTO am_rate_limits VALUES ('owner','workflow_verify',?,10)").bind(window).run();
+    fetchMock.mockResolvedValueOnce(Response.json({ confirmed: true }));
+    const path = `/accounts/${account}/workflows/${workflow}/send`;
+    expect((await call(path, "POST", { consent: true, owns_account: true })).status).toBe(200);
+    await db.prepare("UPDATE am_workflows SET status='completed' WHERE id=?").bind(workflow).run();
+    expect((await call(path, "POST", { consent: true, owns_account: true })).status).toBe(409);
+    expect((await db.prepare("SELECT hits FROM am_rate_limits WHERE user_id='owner' AND action='workflow_send' AND window_start=?").bind(window).first())?.hits).toBe(1);
+    await db.prepare("UPDATE am_workflows SET status='awaiting_email' WHERE id=?").bind(workflow).run();
+    await db.prepare("UPDATE am_rate_limits SET hits=10 WHERE action='workflow_send'").run();
+    const limited = await call(path, "POST", { consent: true, owns_account: true });
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await limited.json()).message).toContain("Avonera48");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("keeps confirmed verification available when the provider rate-limits activation", async () => {
+    const { account, workflow } = await seed();
+    const token = await (await receiptCodec(env, workflow)).seal("test-session");
+    await db.prepare("UPDATE am_workflows SET status='verified',current_step='verify_confirmed',provider_receipt=? WHERE id=?").bind(token, workflow).run();
+    fetchMock.mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "120" } }));
+    const response = await call(`/accounts/${account}/workflows/${workflow}/apply`, "POST", { consent: true, owns_account: true }, { ...user, isAdmin: true });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("120");
+    expect((await response.json()).retry_after).toBe(120);
+    expect((await db.prepare("SELECT status,current_step FROM am_workflows WHERE id=?").bind(workflow).first())).toMatchObject({ status: "verified", current_step: "verify_confirmed" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("allows a private admin to verify and apply in sequence without a signed grant", async () => {
     const { account, workflow } = await seed();
     const admin = { ...user, isAdmin: true };

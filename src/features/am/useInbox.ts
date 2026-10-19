@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AmAccountDetail, AmMessage } from "../../../shared/am";
 import { ApiError } from "@/features/members/api";
-import { am } from "./api";
+import { am, AmApiError } from "./api";
 
 export function useInbox(account: string | null, enabled: boolean) {
   const [messages, setMessages] = useState<AmMessage[]>([]);
@@ -20,6 +20,7 @@ export function useInbox(account: string | null, enabled: boolean) {
   const refreshRef = useRef<() => Promise<void>>(async () => {});
   const refresh = useCallback(() => refreshRef.current(), []);
   const [version, setVersion] = useState(0);
+  const blockedUntil = useRef(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     olderMessages.current = false;
@@ -63,13 +64,17 @@ export function useInbox(account: string | null, enabled: boolean) {
     const schedule = () => {
       window.clearTimeout(timer);
       if (!disposed && enabled && document.visibilityState === "visible") {
-        const delay = Math.min(60000, 5000 * 2 ** failures);
+        const delay = Math.max(Math.min(60000, 5000 * 2 ** failures), blockedUntil.current - Date.now());
         setRetryDelay(delay);
         timer = window.setTimeout(() => void load(true), delay);
       }
     };
     const load = async (sync: boolean) => {
       if (disposed || running || document.visibilityState !== "visible") return;
+      if (sync && enabled && Date.now() < blockedUntil.current) {
+        schedule();
+        return;
+      }
       running = true;
       controller = new AbortController();
       setBusy(true);
@@ -123,6 +128,8 @@ export function useInbox(account: string | null, enabled: boolean) {
           !(e instanceof DOMException && e.name === "AbortError")
         ) {
           setError(e instanceof Error ? e.message : "Could not sync inbox.");
+          if (e instanceof AmApiError && e.status === 429)
+            blockedUntil.current = Date.now() + e.retryAfterSeconds * 1000;
           failures = Math.min(failures + 1, 4);
           if (e instanceof ApiError && [401, 403, 503].includes(e.status))
             failures = 4;

@@ -15,6 +15,7 @@ export class AmError extends Error {
     public code: string,
     message: string,
     public diagnostic?: ProviderDiagnostic,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }

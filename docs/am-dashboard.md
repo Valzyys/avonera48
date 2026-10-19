@@ -256,8 +256,11 @@ never provider bodies, login links, tokens or raw exception messages.
 
 - Default retained account limit: 20 per user; `AM_MAX_ACCOUNTS` can set 1–100.
   Reservations count toward the limit, preventing concurrent generation races.
-- Generate: 10 attempts per user per hour; workflow writes: 10/hour; inbox sync:
-  20/minute; detail reads: 30/minute. Limits use atomic D1 counters.
+- Generate: 10 attempts per user per hour; each provider write step (send, verify, apply): 10/hour; inbox sync:
+  20/minute; detail reads: 30/minute; private workflow entry: 10/minute.
+  Limits use atomic D1 counters. Invalid workflow states do not consume a
+  provider-write budget. A complete send/verify/apply sequence uses one request
+  from each step's independent budget, rather than three from a shared bucket.
 - History, message lists and activity use stable timestamp/ID cursors and bounded
   page sizes. Polling deduplicates stable IDs without discarding older loaded pages.
 - Inbox polls every 5 seconds while visible, aborts/pauses on hidden tabs, resumes
@@ -329,3 +332,20 @@ recognizes the supplied real response for future calls. It cannot retroactively
 verify old outcomes because provider bodies are not persisted and no read-only
 activation-status endpoint has been supplied. Do not replay an old activation
 to correct local history; reconcile the account's actual subscription first.
+
+### Rate limits and cooldowns
+
+Local HTTP 429 errors identify Avonera48 and the limited action. Provider HTTP
+429 errors identify TmailCloud or AMGratis and include `provider_rate_limited`.
+Both return `retry_after` seconds and a `Retry-After` header. Local limits use
+the actual remaining window; upstream limits preserve the provider header
+(seconds or HTTP date), with 60 seconds as the fallback when absent. No immediate
+GET retries are made on 429. Inbox auto-sync, manual refresh, visibility changes
+and repeated calls on the same frontend route respect the cooldown. Ordinary
+GET retries on server errors retain exponential backoff.
+
+An explicit HTTP 429 rejection preserves the prior workflow state, so an already
+verified account is not incorrectly locked as uncertain when activation is rate
+limited. Ambiguous transport/response failures retain the uncertain-state guard.
+Provider daily quotas remain enforced by the provider; this change does not
+reset or bypass them.

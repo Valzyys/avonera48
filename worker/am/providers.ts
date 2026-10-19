@@ -181,7 +181,7 @@ export async function providerRequest(
       }
       throw networkError(error, method, service);
     }
-    if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+    if (res.status >= 500 && attempt < retries) {
       await res.body?.cancel();
       await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
       continue;
@@ -190,14 +190,17 @@ export async function providerRequest(
       await res.body?.cancel();
       throw new AmError(
         res.status === 429 ? 429 : 502,
-        "provider_rejected",
-        "The provider rejected this request. Please try again later.",
+        res.status === 429 ? "provider_rate_limited" : "provider_rejected",
+        res.status === 429
+          ? `${service === "mail" ? "TmailCloud" : "AMGratis"} has limited requests. Wait before retrying; provider quotas cannot be reset by this site.`
+          : "The provider rejected this request. Please try again later.",
         {
           service: service === "mail" ? "tmailcloud" : "amgratis",
           method,
           failure: "http",
           upstream_status: res.status,
         },
+        res.status === 429 ? providerRetryAfter(res.headers.get("retry-after")) : undefined,
       );
     }
     if (!res.body)
@@ -243,6 +246,12 @@ export async function providerRequest(
       );
     }
   }
+}
+function providerRetryAfter(value: string | null) {
+  const seconds = value && /^\d+$/.test(value)
+    ? Number(value)
+    : value ? (Date.parse(value) - Date.now()) / 1000 : NaN;
+  return Number.isFinite(seconds) ? Math.max(1, Math.min(604800, Math.ceil(seconds))) : 60;
 }
 const domainsSchema = z.object({
   success: z.literal(true),
@@ -444,7 +453,7 @@ export async function amRequest(
       throw new AmError(error.status, error.code, `${stage}: ${error.message}`, {
         service: "amgratis", method: "POST", failure: "response",
         ...error.diagnostic, operation,
-      });
+      }, error.retryAfterSeconds);
     throw error;
   });
   const diagnostic = { service: "amgratis", method: "POST", failure: "response", operation } as const;
