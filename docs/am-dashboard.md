@@ -157,7 +157,7 @@ manual-login-first workflow without configuring a signed authorization grant:
 
 1. Generate an email and copy it into the Alight Motion app.
 2. Request login inside Alight Motion. Wait for its confirmation email in `/am`.
-3. Review and explicitly open the confirmation URL yourself.
+3. Review the URL and select **Open direct link** to open it yourself.
 4. In that message's reader, check that you completed login and select
    **Confirm login completed**.
 5. Request a **new** magic link using the dashboard and wait for the new email.
@@ -404,3 +404,18 @@ verified account is not incorrectly locked as uncertain when activation is rate
 limited. Ambiguous transport/response failures retain the uncertain-state guard.
 Provider daily quotas remain enforced by the provider; this change does not
 reset or bypass them.
+
+### Completion scrolling and manual direct links
+
+When an observed workflow newly reaches `completed`, the dashboard focuses and
+scrolls to its result. Polling does not repeat the scroll, and reopening a
+completed historical account does not jump the viewport. Reduced-motion
+preferences use immediate scrolling instead of animation.
+
+Every detected HTTPS URL in the message reader has **Open direct link**, alongside
+Copy link. It opens the original URL in a separate tab with `noopener`,
+`noreferrer` and no referrer, without calling the site's verify/apply API. This
+action is available independently of the provider workflow or its licensing
+state. Email HTML remains inert in the sandbox; only the explicit reviewed-link
+control opens a URL. Use the manual account flow for manual login; a separately
+started automatic workflow continues according to its existing rules.

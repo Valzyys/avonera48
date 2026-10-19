@@ -205,6 +205,15 @@ await page.route("**/api/**", async (route) => {
   });
 });
 try {
+  await page.addInitScript(() => {
+    window.__amCompletionScrolls = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function(options) {
+      if (this.id === "am-workflow-result") window.__amCompletionScrolls.push(options);
+      return original.call(this, options);
+    };
+  });
+  await page.context().route("https://login.alightcreative.com/**", route => route.fulfill({ contentType: "text/plain", body: "Manual login test target" }));
   await page.clock.install();
   await page.goto(process.env.AM_TEST_URL || "http://127.0.0.1:4173/am");
   await expect(
@@ -229,6 +238,17 @@ try {
     page.getByRole("button", { name: "Review & approve" }),
   ).toBeDisabled();
   await expect(page.getByText("123456", { exact: true })).toBeVisible();
+  const directLink = page.getByRole("link", { name: "Open direct link", exact: true });
+  await expect(directLink).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(directLink).toHaveAttribute("referrerpolicy", "no-referrer");
+  const popupOpened = page.waitForEvent("popup");
+  await directLink.click();
+  const manualPopup = await popupOpened;
+  await manualPopup.waitForLoadState("domcontentloaded");
+  expect(manualPopup.url()).toBe("https://login.alightcreative.com/auth?token=test-only");
+  await manualPopup.close();
+  expect(sendRequests).toBe(0);
+  expect(combinedRequests).toBe(0);
   await page.getByRole("tab", { name: "HTML", exact: true }).click();
   await expect(page.frameLocator("iframe").locator("img, script")).toHaveCount(
     0,
@@ -335,7 +355,7 @@ try {
   await expect(page.getByRole("button", { name: "Verify & Apply", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Request magic link", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: /Alight Creative.*Your sign-in request/ }).click();
-  await expect(page.getByRole("link", { name: "Open confirmation link", exact: true })).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Open direct link", exact: true })).toHaveAttribute("target", "_blank");
   const confirmLogin = page.getByRole("button", { name: "Confirm login completed", exact: true });
   await expect(confirmLogin).toBeDisabled();
   await page.getByLabel("I signed in to Alight Motion and opened this email's confirmation link myself.").check();
@@ -358,6 +378,7 @@ try {
   const beforeRecovery = syncs;
   await page.clock.fastForward(120000);
   await expect.poll(() => syncs).toBeGreaterThan(beforeRecovery);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Generate & Activate", exact: true }).click();
   await expect.poll(() => autoSends).toBe(1);
   expect(autoVerifications).toBe(0);
@@ -371,11 +392,17 @@ try {
   await expect.poll(() => autoVerifications).toBe(1);
   await expect(page.getByText("Automatic admin workflow", { exact: true })).toBeVisible();
   await expect(page.locator(".am-workflow-status strong")).toHaveText("completed");
+  await expect(page.locator("#am-workflow-result")).toBeFocused();
+  expect(await page.evaluate(() => window.__amCompletionScrolls)).toEqual([{ behavior: "auto", block: "center" }]);
   await page.clock.fastForward(30000);
+  expect(await page.evaluate(() => window.__amCompletionScrolls.length)).toBe(1);
   expect(autoOrder).toEqual(["send", "verify-and-apply"]);
   expect(autoSends).toBe(1);
   expect(loginConfirmRequests).toBe(1);
   await expect(page.getByRole("button", { name: "Generate Account", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".am-workflow-status strong")).toHaveText("completed");
+  expect(await page.evaluate(() => window.__amCompletionScrolls.length)).toBe(0);
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

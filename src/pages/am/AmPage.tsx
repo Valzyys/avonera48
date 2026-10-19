@@ -102,6 +102,21 @@ function Workspace({ name }: { name: string }) {
   );
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
+  const resultRef = useRef<HTMLDivElement>(null);
+  const lastWorkflowStates = useRef(new Map<string, string>());
+  useEffect(() => {
+    if (!workflow || inbox.detail?.account.id !== selected) return;
+    const previous = lastWorkflowStates.current.get(workflow.id);
+    lastWorkflowStates.current.set(workflow.id, workflow.status);
+    // Scroll on a new completion, never on historical reads or polling repeats.
+    if (previous && previous !== "completed" && workflow.status === "completed") {
+      resultRef.current?.focus({ preventScroll: true });
+      resultRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "center",
+      });
+    }
+  }, [workflow, selected, inbox.detail?.account.id]);
   const personal = service?.private_admin === true;
   const automatic = !!workflow && !!inbox.detail?.automatic_workflows?.includes(workflow.id);
   const auto = useAutomaticWorkflow(personal && automatic, selected, inbox.detail, inbox.messages, inbox.refresh);
@@ -570,7 +585,7 @@ function Workspace({ name }: { name: string }) {
             )}
             {manual && loginConfirmed && <p className="am-help">Manual login confirmed by you. Request a new magic link for the next step.</p>}
             {auto.error && automatic && <p className="am-inline-error" role="alert">{auto.error}</p>}
-            <div className="am-workflow-status">
+            <div className="am-workflow-status" id="am-workflow-result" ref={resultRef} tabIndex={-1} role="status" aria-live="polite">
               <Icon name="pulse" size={17} />
               <div>
                 <strong>
@@ -905,6 +920,7 @@ function Workspace({ name }: { name: string }) {
                     <span className="am-label">
                       DETECTED LINKS · REVIEW BEFORE USE
                     </span>
+                    <p className="am-help">Open direct link opens the URL in a new tab for manual login. The button does not call this site's verification or activation API.</p>
                     {message.links.map((link) => (
                       <div key={link.url}>
                         <span className="am-link-host">
@@ -928,12 +944,9 @@ function Workspace({ name }: { name: string }) {
                           >
                             Copy link
                           </Button>
-                          {manual && !loginConfirmed && link.authentication &&
-                            ["alightcreative.com", "login.alightcreative.com", "alight-creative.firebaseapp.com"].includes(new URL(link.url).hostname) && (
-                            <a className="btn btn--secondary btn--sm" href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
-                              Open confirmation link
-                            </a>
-                          )}
+                          <a className="btn btn--secondary btn--sm" href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+                            Open direct link
+                          </a>
                           {link.authentication && !personal && (
                             <Button
                               size="sm"
