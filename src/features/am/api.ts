@@ -84,7 +84,7 @@ export const am = {
   operation: (
     id: string,
     workflow: string,
-    operation: "send" | "verify" | "apply" | "verify-and-apply",
+    operation: "send" | "verify" | "apply" | "verify-and-apply" | "confirm-login",
     consent: Record<string, unknown>,
   ) =>
     request(`/accounts/${id}/workflows/${workflow}/${operation}`, {

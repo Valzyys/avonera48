@@ -314,6 +314,10 @@ async function runOperation(
     .first<AmWorkflow & { provider_receipt: string | null }>();
   if (!workflow)
     throw new AmError(404, "workflow_not_found", "Workflow not found.");
+  if (personal) {
+    await requireManualLogin(db, account.id, workflowId);
+    if (operation === "verify") await requireNewMagicLink(db, account.id, workflowId);
+  }
   const grant =
     operation === "send" || personal
       ? null
@@ -340,6 +344,11 @@ async function runOperation(
   let link: string | undefined;
   if (operation === "verify") {
     const parsed = verifySchema.parse(input);
+    if (personal) {
+      const fresh = await db.prepare("SELECT id FROM am_messages WHERE id=? AND account_id=? AND id NOT IN (SELECT message_id FROM am_login_confirmations WHERE workflow_id=?) AND received_at >= (SELECT MAX(created_at) FROM am_activity_logs WHERE account_id=? AND action='send_approved')")
+        .bind(parsed.message_id, account.id, workflowId, account.id).first();
+      if (!fresh) throw new AmError(409, "fresh_magic_link_required", "Use the new magic-link email requested after manual login, not the confirmation email you already opened.");
+    }
     const detail = await ownedMessage(env, db, account, parsed.message_id);
     for (const candidate of detail.links) {
       if (
@@ -455,6 +464,18 @@ async function runOperation(
     await activity(db, account.id, limited ? `${operation}_rate_limited` : declined ? `${operation}_declined` : `${operation}_outcome_unknown`, limited || declined ? "failed" : "uncertain");
     throw error;
   }
+}
+
+async function requireManualLogin(db: D1Database, accountId: string, workflowId: string) {
+  const confirmed = await db.prepare("SELECT workflow_id FROM am_login_confirmations WHERE workflow_id=? AND account_id=?")
+    .bind(workflowId, accountId).first();
+  if (!confirmed) throw new AmError(409, "manual_login_required",
+    "Sign in to Alight Motion using this email, open the confirmation link from your inbox, then confirm that you completed login before requesting a new magic link.");
+}
+async function requireNewMagicLink(db: D1Database, accountId: string, workflowId: string) {
+  const sent = await db.prepare("SELECT l.id FROM am_activity_logs l JOIN am_login_confirmations c ON c.account_id=l.account_id WHERE c.workflow_id=? AND c.account_id=? AND l.action='send_confirmed' AND l.created_at>=c.confirmed_at LIMIT 1")
+    .bind(workflowId, accountId).first();
+  if (!sent) throw new AmError(409, "new_magic_link_required", "After confirming manual login, request a new magic link and wait for its email before verification.");
 }
 
 export async function handleAm(
@@ -679,6 +700,8 @@ export async function handleAm(
         ok: true,
         account,
         workflows: workflows.results,
+        login_confirmations: (await db.prepare("SELECT workflow_id,message_id,confirmed_at FROM am_login_confirmations WHERE account_id=?")
+          .bind(account.id).all()).results,
         activity: a.items,
         activity_next_cursor: a.next_cursor,
       });
@@ -713,6 +736,33 @@ export async function handleAm(
         message: await ownedMessage(env, db, account, msg[1]),
       });
     }
+    const manual = /^workflows\/([^/]+)\/confirm-login$/.exec(action);
+    if (manual && request.method === "POST") {
+      if (!user.isAdmin) throw new AmError(403, "admin_required", "This private workflow is available only to administrators.");
+      const input = z.object({ message_id: idSchema, login_completed: z.literal(true) }).safeParse(await body(request));
+      if (!input.success) throw new AmError(400, "login_confirmation_required", "Confirm that you signed in and opened the confirmation link from this message.");
+      if (!idSchema.safeParse(manual[1]).success) throw new AmError(404, "workflow_not_found", "Workflow not found.");
+      const workflow = await db.prepare("SELECT id,status FROM am_workflows WHERE id=? AND account_id=?")
+        .bind(manual[1], account.id).first<{ id: string; status: string }>();
+      if (!workflow) throw new AmError(404, "workflow_not_found", "Workflow not found.");
+      if (["running", "completed"].includes(workflow.status) || account.status !== "ready")
+        throw new AmError(409, "workflow_state", "This workflow cannot confirm manual login in its current state.");
+      await rate(db, user.id, "message", 60, 30);
+      const detail = await ownedMessage(env, db, account, input.data.message_id);
+      if (!detail.links.some(link => {
+        if (!link.authentication) return false;
+        try {
+          verificationLink(link.url, detail.sender, privateLinkPolicy);
+          return true;
+        } catch { return false; }
+      }))
+        throw new AmError(409, "confirmation_email_required", "Select an Alight confirmation email containing a trusted authentication link.");
+      const inserted = await db.prepare("INSERT INTO am_login_confirmations(workflow_id,account_id,message_id,confirmed_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM am_workflows w JOIN am_accounts a ON a.id=w.account_id WHERE w.id=? AND w.account_id=? AND w.status NOT IN ('running','completed') AND a.status='ready') ON CONFLICT(workflow_id) DO NOTHING RETURNING workflow_id")
+        .bind(workflow.id, account.id, input.data.message_id, now(), workflow.id, account.id).first();
+      if (inserted) await activity(db, account.id, "manual_login_confirmed_by_owner", "completed");
+      await requireManualLogin(db, account.id, workflow.id);
+      return reply({ ok: true });
+    }
     const combined = /^workflows\/([^/]+)\/verify-and-apply$/.exec(action);
     if (combined && request.method === "POST") {
       if (!user.isAdmin)
@@ -723,6 +773,7 @@ export async function handleAm(
       const state = await db.prepare("SELECT status FROM am_workflows WHERE id=? AND account_id=?")
         .bind(combined[1], account.id).first<{ status: string }>();
       if (!state) throw new AmError(404, "workflow_not_found", "Workflow not found.");
+      await requireManualLogin(db, account.id, combined[1]);
       if (!["awaiting_email", "awaiting_approval", "verified"].includes(state.status))
         throw new AmError(409, "workflow_state", "This workflow cannot continue in its current state.");
       const contract = amContract(env.AM_API_CONTRACT);
@@ -732,12 +783,13 @@ export async function handleAm(
       await receiptCodec(env, combined[1]);
       const input: Record<string, unknown> = { consent: true, owns_account: true };
       if (state.status !== "verified") {
+        await requireNewMagicLink(db, account.id, combined[1]);
         const sent = await db.prepare("SELECT created_at FROM am_activity_logs WHERE account_id=? AND action='send_approved' ORDER BY created_at DESC,id DESC LIMIT 1")
           .bind(account.id).first<{ created_at: string }>();
         // Avoid replaying an older login email while waiting for the new one.
-        const cutoff = sent ? new Date(Date.parse(sent.created_at) - 30000).toISOString() : null;
-        const rows = await db.prepare("SELECT id FROM am_messages WHERE account_id=? AND (? IS NULL OR received_at>=?) ORDER BY received_at DESC,id DESC LIMIT 10")
-          .bind(account.id, cutoff, cutoff).all<{ id: string }>();
+        const cutoff = sent?.created_at ?? null;
+        const rows = await db.prepare("SELECT id FROM am_messages WHERE account_id=? AND (? IS NULL OR received_at>=?) AND id NOT IN (SELECT message_id FROM am_login_confirmations WHERE workflow_id=?) ORDER BY received_at DESC,id DESC LIMIT 10")
+          .bind(account.id, cutoff, cutoff, combined[1]).all<{ id: string }>();
         for (const row of rows.results) {
           const detail = await ownedMessage(env, db, account, row.id);
           const links = detail.links.filter(link => link.authentication && permittedLink(link.url, detail.sender, privateLinkPolicy));

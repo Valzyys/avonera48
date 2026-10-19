@@ -152,15 +152,41 @@ authentication link or receipt is written to activity logs.
 
 ### Private administrator workflow
 
-For the site owner's own accounts, existing authenticated administrators can use
-**Verify & Apply** without configuring a signed authorization grant or accepting
-additional consent dialogs. Administrator identity comes from the existing
+For the site owner's own accounts, existing authenticated administrators use a
+manual-login-first workflow without configuring a signed authorization grant:
+
+1. Generate an email and copy it into the Alight Motion app.
+2. Request login inside Alight Motion. Wait for its confirmation email in `/am`.
+3. Review and explicitly open the confirmation URL yourself.
+4. In that message's reader, check that you completed login and select
+   **Confirm login completed**.
+5. Request a **new** magic link using the dashboard and wait for the new email.
+6. Select **Verify & Apply**. The API verifies the fresh link, then activates
+   only after successful verification. Nothing starts automatically on generation,
+   inbox detection, opening a message, or saving the login confirmation.
+
+The server requires a saved manual-login confirmation before sending, verifying
+or applying in private mode. Confirmation is the owner's attestation plus an
+owned inbox message containing a trusted Alight authentication URL. It does not
+independently prove an active session inside the Alight Motion app.
+`am_login_confirmations` stores only workflow/account/message IDs and time,
+with foreign keys and idempotent insertion; URLs and tokens are not persisted.
+Migration `0002_am_manual_login.sql` adds this table, and the automatic schema
+bootstrap also applies it to existing deployments.
+
+ Administrator identity comes from the existing
 server-side role / `ADMIN_EMAILS` check, never from request JSON. No admin role is
 granted by visiting `/am`. The API key and workflow encryption secret are still
 required. Mailboxes remain scoped to the signed-in user, including administrators.
 
-POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` selects a link
-from the newest saved messages of that owned mailbox. It fetches the message,
+POST `/api/am/accounts/:id/workflows/:workflowId/confirm-login` accepts
+`{message_id: localUUID, login_completed:true}` after ownership and trusted
+sender/link checks. This only saves manual progress and never calls AMGratis.
+
+POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` requires a
+successful new magic-link request after that manual confirmation, then selects
+a link from a new saved message of that owned mailbox. The manual confirmation
+message is excluded, including from individual private verification requests. It fetches the message,
 requires an exact trusted Alight sender and HTTPS link host, then re-fetches and
 matches the link hash before verification. Firebase Alight wrapper links are
 decoded locally to their nested Alight authentication URL, with both hosts and
@@ -222,6 +248,7 @@ cannot grant access.
 | POST `/api/am/accounts/:id/workflows/:workflowId/send`   | Explicitly approved magic-link request                      |
 | POST `/api/am/accounts/:id/workflows/:workflowId/verify` | Submit the exact reviewed link                              |
 | POST `/api/am/accounts/:id/workflows/:workflowId/apply`  | Explicitly approved, licensed activation                    |
+| POST `/api/am/accounts/:id/workflows/:workflowId/confirm-login` | Save owner confirmation of manual login from an owned message |
 | POST `/api/am/accounts/:id/workflows/:workflowId/verify-and-apply` | Private admin verification followed by confirmed activation |
 
 Individual step mutations require `consent:true, owns_account:true`.
@@ -245,8 +272,8 @@ request may have succeeded. This starts a new email request, never replays the
 uncertain verification token or retries an uncertain activation. Explicit
 `success:false` responses are stored as `failed` with the operation identified;
 a failed send or verification can start a new email request. A fresh email
-request excludes messages older than that request (30 seconds of clock skew
-allowed), so Verify & Apply does not accidentally reuse an old sign-in link.
+request excludes messages timestamped before the request, so Verify & Apply does
+not accidentally reuse an old sign-in link.
 Provider error text and tokens are never forwarded; safe diagnostics identify
 the operation and whether failure was a refusal or an unconfirmed response.
 The stored error includes only sanitized internal error codes and HTTP status,

@@ -53,17 +53,15 @@ describe("AM first-use database setup", () => {
       .bind(id, viewer.id, `${id}@bussiness.biz.id`, date, date)
       .run();
     const sql = (
-      await readFile(
-        new URL("../migrations/0001_am_dashboard.sql", import.meta.url),
-        "utf8",
-      )
+      (await Promise.all(["0001_am_dashboard.sql", "0002_am_manual_login.sql"].map(name =>
+        readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8")))).join("\n")
     )
       .replace(/^--.*$/gm, "")
       .split(";")
       .map((s) => s.trim())
       .filter((s) => s && !s.startsWith("PRAGMA"));
-    expect(AM_SCHEMA.map((s) => s.replace(/\s+/g, " "))).toEqual(
-      sql.map((s) => s.replace(/\s+/g, " ")),
+    expect(AM_SCHEMA.map((s) => s.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")"))).toEqual(
+      sql.map((s) => s.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")")),
     );
     await db.batch(sql.map((s) => db.prepare(s)));
     await ensureAmSchema(db);

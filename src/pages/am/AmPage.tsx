@@ -93,6 +93,7 @@ function Workspace({ name }: { name: string }) {
   const [owns, setOwns] = useState(false);
   const [consent, setConsent] = useState(false);
   const [operating, setOperating] = useState(false);
+  const [manualLoginDone, setManualLoginDone] = useState(false);
   const active = accounts.find((a) => a.id === selected) ?? null;
   const inbox = useInbox(
     selected,
@@ -101,6 +102,10 @@ function Workspace({ name }: { name: string }) {
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
   const personal = service?.private_admin === true;
+  const loginConfirmation = inbox.detail?.login_confirmations?.find(c => c.workflow_id === workflow?.id);
+  const loginConfirmed = !!loginConfirmation;
+  const magicRequested = !!loginConfirmation && !!inbox.detail?.activity.some(event =>
+    event.action === "send_confirmed" && event.created_at >= loginConfirmation.confirmed_at);
   const resend = workflow?.status === "uncertain" && ["send", "verify"].includes(workflow.current_step);
   const restartEmail = workflow?.status === "failed" && ["send", "verify"].includes(workflow.current_step);
   const frame = useMemo(
@@ -149,6 +154,9 @@ function Workspace({ name }: { name: string }) {
       void load();
     }
   }, [load]);
+  useEffect(() => {
+    setManualLoginDone(false);
+  }, [selected, messageId]);
   useEffect(() => {
     setMessageId(null);
     setMessage(null);
@@ -282,6 +290,21 @@ function Workspace({ name }: { name: string }) {
       setOperating(false);
     }
   };
+  const confirmLogin = async () => {
+    if (!selected || !workflow || !messageId || !manualLoginDone || operating) return;
+    setOperating(true);
+    try {
+      await am.operation(selected, workflow.id, "confirm-login", {
+        message_id: messageId, login_completed: true,
+      });
+      await inbox.refresh();
+      toast.success("Your manual login confirmation was saved. You can now request a new magic link.");
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      setOperating(false);
+    }
+  };
   const authorized = !!service?.authorization.valid;
   const can = (scope: string) => {
     const operation =
@@ -301,11 +324,16 @@ function Workspace({ name }: { name: string }) {
             : "license:apply",
       )
     : false;
-  const steps = ["Mailbox", "Magic link", "Verification", "License"];
+  const steps = personal
+    ? ["Login in Alight", "Confirm email", "New magic link", "Verify & Apply"]
+    : ["Mailbox", "Magic link", "Verification", "License"];
   const progress = !current
     ? -1
     : workflow?.status === "completed"
       ? 3
+      : personal
+        ? !loginConfirmed ? inbox.messages.length ? 1 : 0
+          : magicRequested || workflow?.status === "verified" ? 3 : 2
       : workflow?.status === "verified"
         ? 2
         : workflow?.status === "awaiting_approval"
@@ -485,7 +513,7 @@ function Workspace({ name }: { name: string }) {
             <h2>{personal ? "Your private workflow." : "You're in control."}</h2>
             <p className="am-muted">
               {personal
-                ? "Request your sign-in email, then choose Verify & Apply. Activation follows only after the provider confirms verification."
+                ? "First sign in to Alight Motion with your generated email. Open the confirmation link from the inbox and confirm you completed login. Only then request a new magic link and choose Verify & Apply."
                 : "Review your mail. Approve each action. Nothing authenticates automatically."}
             </p>
             <ol className="am-steps">
@@ -512,11 +540,23 @@ function Workspace({ name }: { name: string }) {
                 </li>
               ))}
             </ol>
+            {personal && !loginConfirmed && (
+              <div className="am-permission">
+                <Icon name="info" size={17} />
+                <p>
+                  Copy your generated email into the Alight Motion app and request login there.
+                  Wait for its email below, review and open the confirmation link yourself,
+                  then mark login complete in the message reader. This site cannot independently
+                  check your login inside Alight Motion. No magic-link request or activation runs before your confirmation.
+                </p>
+              </div>
+            )}
+            {personal && loginConfirmed && <p className="am-help">Manual login confirmed by you. Request a new magic link for the next step.</p>}
             <div className="am-workflow-status">
               <Icon name="pulse" size={17} />
               <div>
                 <strong>
-                  {workflow
+                  {personal && workflow && !loginConfirmed ? "Manual login required" : workflow
                     ? readable(workflow.status)
                     : "Create or select an account"}
                 </strong>
@@ -550,6 +590,7 @@ function Workspace({ name }: { name: string }) {
                 disabled={
                   !workflow ||
                   operating ||
+                  (personal && !loginConfirmed) ||
                   !can("magiclink:send") ||
                   (!resend && !restartEmail && !["awaiting_email", "awaiting_approval"].includes(
                     workflow.status,
@@ -561,9 +602,9 @@ function Workspace({ name }: { name: string }) {
               </Button>
               {personal ? <Button
                 size="sm" icon="key" loading={operating}
-                disabled={!workflow || !can("account:verify") || !can("license:apply") ||
+                disabled={!workflow || !loginConfirmed || !can("account:verify") || !can("license:apply") ||
                   !["awaiting_email", "awaiting_approval", "verified"].includes(workflow.status) ||
-                  (workflow.status !== "verified" && !inbox.messages.length)}
+                  (workflow.status !== "verified" && (!magicRequested || !inbox.messages.some(m => m.id !== loginConfirmation?.message_id)))}
                 onClick={() => void runPrivate("verify-and-apply")}
               >
                 Verify &amp; Apply
@@ -869,6 +910,12 @@ function Workspace({ name }: { name: string }) {
                           >
                             Copy link
                           </Button>
+                          {personal && !loginConfirmed && link.authentication &&
+                            ["alightcreative.com", "login.alightcreative.com", "alight-creative.firebaseapp.com"].includes(new URL(link.url).hostname) && (
+                            <a className="btn btn--secondary btn--sm" href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+                              Open confirmation link
+                            </a>
+                          )}
                           {link.authentication && !personal && (
                             <Button
                               size="sm"
@@ -889,6 +936,17 @@ function Workspace({ name }: { name: string }) {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                {personal && !loginConfirmed && message.links.some(link => link.authentication) && (
+                  <div className="am-login-confirmation">
+                    <label className="am-check">
+                      <input type="checkbox" checked={manualLoginDone} onChange={e => setManualLoginDone(e.target.checked)} />
+                      I signed in to Alight Motion and opened this email's confirmation link myself.
+                    </label>
+                    <Button size="sm" icon="check" loading={operating} disabled={!manualLoginDone || !workflow} onClick={() => void confirmLogin()}>
+                      Confirm login completed
+                    </Button>
                   </div>
                 )}
                 <div

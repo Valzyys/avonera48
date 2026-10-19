@@ -14,6 +14,7 @@ import { handleAm } from "../worker/am";
 import { handleAuth } from "../worker/auth";
 import { readGrant, receiptCodec, type AmEnv } from "../worker/am/authorization";
 import { sha256 } from "../worker/http";
+import { ensureAmSchema } from "../worker/am/schema";
 
 let mf: Miniflare;
 let db: D1Database;
@@ -111,6 +112,16 @@ async function seed() {
     .run();
   return { account, workflow };
 }
+async function privatePrerequisites(account: string, workflow: string) {
+  const message = crypto.randomUUID();
+  await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Manual login','',?)")
+    .bind(message, account, "manual-login-fixture", "2000-01-01T00:00:00.000Z").run();
+  await db.prepare("INSERT INTO am_login_confirmations VALUES(?,?,?,?)")
+    .bind(workflow, account, message, "2000-01-01T00:00:00.000Z").run();
+  for (const action of ["send_approved", "send_confirmed"])
+    await db.prepare("INSERT INTO am_activity_logs VALUES(?,?,?,'completed',?)")
+      .bind(crypto.randomUUID(), account, action, "2001-01-01T00:00:00.000Z").run();
+}
 const b64 = (value: Uint8Array) =>
   btoa(String.fromCharCode(...value))
     .replace(/\+/g, "-")
@@ -174,6 +185,7 @@ beforeAll(async () => {
       .filter(Boolean)
       .map((s) => db.prepare(s)),
   );
+  await ensureAmSchema(db);
   issuerKey = await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
@@ -417,6 +429,40 @@ describe("AM authenticated persistence", () => {
 });
 
 describe("AM approved workflows", () => {
+  it("requires manual Alight login confirmation, then a separate fresh magic-link request", async () => {
+    const { account, workflow } = await seed();
+    const admin = { ...user, isAdmin: true };
+    const prefix = `/accounts/${account}/workflows/${workflow}`;
+    const consent = { consent: true, owns_account: true };
+    expect((await call(`${prefix}/send`, "POST", consent, admin)).status).toBe(409);
+    expect((await call(`${prefix}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const manual = crypto.randomUUID();
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Manual login','',?)")
+      .bind(manual, account, "manual-message", new Date(Date.now() - 60000).toISOString()).run();
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).includes("/api/email/message/")) return Response.json(detailPayload(String(url).endsWith("new-message") ? "new-message" : "manual-message"));
+      if (String(url).endsWith("/verify-account")) return Response.json({ confirmed: true, receipt: "test-session" });
+      return Response.json({ confirmed: true });
+    });
+    expect((await call(`${prefix}/confirm-login`, "POST", { message_id: manual, login_completed: false }, admin)).status).toBe(400);
+    expect((await call(`${prefix}/confirm-login`, "POST", { message_id: crypto.randomUUID(), login_completed: true }, admin)).status).toBe(404);
+    for (let attempt = 0; attempt < 2; attempt++)
+      expect((await call(`${prefix}/confirm-login`, "POST", { message_id: manual, login_completed: true }, admin)).status).toBe(200);
+    const detail = await (await call(`/accounts/${account}`)).json();
+    expect(detail.login_confirmations).toHaveLength(1);
+    expect(detail.activity.filter((a: { action: string }) => a.action === "manual_login_confirmed_by_owner")).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("amgratis.my.id"))).toBe(false);
+    expect((await call(`${prefix}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
+    expect((await call(`${prefix}/send`, "POST", consent, admin)).status).toBe(200);
+    expect((await call(`${prefix}/verify-and-apply`, "POST", {}, admin)).status).toBe(409);
+    expect((await call(`${prefix}/verify`, "POST", { ...consent, message_id: manual, link_sha256: await sha256(link) }, admin)).status).toBe(409);
+    await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','New magic link','',?)")
+      .bind(crypto.randomUUID(), account, "new-message", new Date(Date.now() + 1000).toISOString()).run();
+    expect((await call(`${prefix}/verify-and-apply`, "POST", {}, admin)).status).toBe(200);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/verify-account"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/apply-premium"))).toHaveLength(1);
+  });
   it("uses separate step budgets and does not charge invalid workflow states", async () => {
     const { account, workflow } = await seed();
     const window = Math.floor(Date.now() / 3600000) * 3600;
@@ -438,6 +484,7 @@ describe("AM approved workflows", () => {
   });
   it("keeps confirmed verification available when the provider rate-limits activation", async () => {
     const { account, workflow } = await seed();
+    await privatePrerequisites(account, workflow);
     const token = await (await receiptCodec(env, workflow)).seal("test-session");
     await db.prepare("UPDATE am_workflows SET status='verified',current_step='verify_confirmed',provider_receipt=? WHERE id=?").bind(token, workflow).run();
     fetchMock.mockResolvedValueOnce(Response.json({}, { status: 429, headers: { "retry-after": "120" } }));
@@ -450,6 +497,7 @@ describe("AM approved workflows", () => {
   });
   it("allows a private admin to verify and apply in sequence without a signed grant", async () => {
     const { account, workflow } = await seed();
+    await privatePrerequisites(account, workflow);
     const admin = { ...user, isAdmin: true };
     const status = await (await call("/status", "GET", undefined, admin)).json();
     expect(status.private_admin).toBe(true);
@@ -490,6 +538,7 @@ describe("AM approved workflows", () => {
   });
   it("recovers a declined verification with a fresh email and excludes old messages", async () => {
     const { account, workflow } = await seed();
+    await privatePrerequisites(account, workflow);
     const admin = { ...user, isAdmin: true };
     await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
       .bind(crypto.randomUUID(), account, "old-message", new Date(Date.now() - 3600000).toISOString()).run();
@@ -513,6 +562,7 @@ describe("AM approved workflows", () => {
   });
   it("stops private activation after a failed verification and never replays an uncertain token exchange", async () => {
     const { account, workflow } = await seed();
+    await privatePrerequisites(account, workflow);
     const admin = { ...user, isAdmin: true };
     await db.prepare("INSERT INTO am_messages(id,account_id,provider_message_id,sender,subject,preview,received_at) VALUES(?,?,?,'Alight Creative','Sign in','',?)")
       .bind(crypto.randomUUID(), account, "private-message", date).run();
@@ -527,6 +577,7 @@ describe("AM approved workflows", () => {
   });
   it("refuses private verification of another user's account or an untrusted sender", async () => {
     const { account, workflow } = await seed();
+    await privatePrerequisites(account, workflow);
     const path = `/accounts/${account}/workflows/${workflow}/verify-and-apply`;
     expect((await call(path, "POST", {}, { ...stranger, isAdmin: true })).status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();

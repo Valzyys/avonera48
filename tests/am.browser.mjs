@@ -30,6 +30,9 @@ let privateAdmin = false;
 let combinedRequests = 0;
 let limitInbox = false;
 let limitedSyncs = 0;
+let manualLoginConfirmed = false;
+let magicRequestedAfterLogin = false;
+let loginConfirmRequests = 0;
 let sendRequests = 0;
 let uncertainSend = false;
 let lastSendBody;
@@ -94,11 +97,16 @@ await page.route("**/api/**", async (route) => {
       generated = true;
       data = { account };
     } else data = { items: generated ? [account] : [], next_cursor: null };
+  } else if (path.endsWith("/confirm-login")) {
+    loginConfirmRequests++;
+    manualLoginConfirmed = true;
+    data = {};
   } else if (path.endsWith("/verify-and-apply")) {
     combinedRequests++;
     data = { status: "completed" };
   } else if (path.endsWith("/send")) {
     sendRequests++;
+    if (privateAdmin && manualLoginConfirmed) magicRequestedAfterLogin = true;
     lastSendBody = route.request().postDataJSON();
     data = { status: "awaiting_approval" };
   } else if (path.endsWith("/sync")) {
@@ -127,6 +135,7 @@ await page.route("**/api/**", async (route) => {
   else if (path.endsWith("/messages"))
     data = {
       items: [
+        ...(magicRequestedAfterLogin ? [{ id: "44444444-4444-4444-8444-444444444444", provider_message_id: "new-message", sender: "Alight Creative", subject: "New magic link", preview: "New email", received_at: date }] : []),
         {
           id: messageId,
           provider_message_id: "provider-message",
@@ -141,6 +150,7 @@ await page.route("**/api/**", async (route) => {
   else if (path === `/api/am/accounts/${id}`)
     data = {
       account,
+      login_confirmations: manualLoginConfirmed ? [{ workflow_id: "33333333-3333-4333-8333-333333333333", message_id: messageId, confirmed_at: date }] : [],
       workflows: [
         {
           id: "33333333-3333-4333-8333-333333333333",
@@ -153,6 +163,7 @@ await page.route("**/api/**", async (route) => {
         },
       ],
       activity: [
+        ...(magicRequestedAfterLogin ? [{ id: "send-event", action: "send_confirmed", status: "completed", created_at: date }] : []),
         {
           id: "event-test",
           action: "account_generated",
@@ -301,6 +312,18 @@ try {
   uncertainSend = false;
   await page.reload();
   await expect(page.getByText("Private admin access", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verify & Apply", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Request magic link", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: /Alight Creative.*Your sign-in request/ }).click();
+  await expect(page.getByRole("link", { name: "Open confirmation link", exact: true })).toHaveAttribute("target", "_blank");
+  const confirmLogin = page.getByRole("button", { name: "Confirm login completed", exact: true });
+  await expect(confirmLogin).toBeDisabled();
+  await page.getByLabel("I signed in to Alight Motion and opened this email's confirmation link myself.").check();
+  await confirmLogin.click();
+  await expect.poll(() => loginConfirmRequests).toBe(1);
+  await expect(page.getByRole("button", { name: "Verify & Apply", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Request magic link", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Verify & Apply", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Verify & Apply", exact: true }).click();
   await expect.poll(() => combinedRequests).toBe(1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
