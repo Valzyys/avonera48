@@ -46,6 +46,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("AM provider transport", () => {
+  it("accepts the actual nested activation response only for a valid linked account", async () => {
+    const applied = {
+      success: true, email: "owner@example.com",
+      data: { success: true, result: {
+        status: "success", accountLinkStatus: "linked-current", source: "cache",
+        valid: true, autoRenewing: true, expiryTimeMillis: 1814627568734,
+      } },
+    };
+    const activate = () => amRequest("apply", amContract(), "test-key", { email: "owner@example.com", receipt: "test-session" });
+    mocked.mockResolvedValueOnce(Response.json(applied));
+    expect(await activate()).toEqual({ receipt: null });
+    for (const response of [
+      { ...applied, data: { ...applied.data, success: false } },
+      { ...applied, data: { ...applied.data, result: { ...applied.data.result, valid: false } } },
+      { ...applied, data: { ...applied.data, result: { ...applied.data.result, status: "pending" } } },
+      { ...applied, data: { ...applied.data, result: { ...applied.data.result, accountLinkStatus: "unlinked" } } },
+      { success: true, message: "Premium activation applied successfully." },
+    ]) {
+      mocked.mockResolvedValueOnce(Response.json(response));
+      await expect(activate()).rejects.toMatchObject({ code: "provider_unsuccessful" });
+    }
+    mocked.mockResolvedValueOnce(Response.json({ ...applied, email: "someone-else@example.com" }));
+    await expect(activate()).rejects.toMatchObject({ code: "provider_account_mismatch" });
+    mocked.mockResolvedValueOnce(Response.json({ ...applied, success: false }));
+    await expect(activate()).rejects.toMatchObject({ code: "provider_declined" });
+  });
   it("unwraps the real Firebase link format without changing nested login parameters", () => {
     const inner = "https://alightcreative.com/auth_action/?apiKey=test-only&mode=signIn&oobCode=test-only&continueUrl=https://alightcreative.com?ui_sid%3Dtest%26ui_sd%3D0&lang=en";
     const sender = "noreply@alight-creative.firebaseapp.com";

@@ -113,16 +113,19 @@ export function mailContract(raw?: string): MailContract {
 }
 export const amOperation = z.enum(["send", "verify", "apply"]);
 export type AmOperation = z.infer<typeof amOperation>;
+const successCheck = z.object({
+  path: pointer,
+  value: z.union([z.boolean(), z.string().min(1), z.number()]),
+});
 const operation = z
   .object({
     body: z.record(
       z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/),
       z.enum(["email", "magic_link", "receipt"]),
     ),
-    success: z.object({
-      path: pointer,
-      value: z.union([z.boolean(), z.string().min(1), z.number()]),
-    }),
+    success: successCheck,
+    success_all: z.array(successCheck).max(10).optional(),
+    success_alternatives: z.array(z.array(successCheck).min(1).max(10)).max(5).optional(),
     receipt: pointer.optional(),
   })
   .strict();
@@ -183,6 +186,13 @@ const documentedAmContract: AmContract = {
     apply: {
       body: { email: "email", idToken: "receipt" },
       success: { path: "/status", value: "active" },
+      success_all: [{ path: "/success", value: true }],
+      success_alternatives: [[
+        { path: "/data/success", value: true },
+        { path: "/data/result/status", value: "success" },
+        { path: "/data/result/accountLinkStatus", value: "linked-current" },
+        { path: "/data/result/valid", value: true },
+      ]],
     },
   },
 };

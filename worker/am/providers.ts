@@ -453,8 +453,15 @@ export async function amRequest(
       operation === "verify"
         ? "The provider declined verification. Request a fresh sign-in email; this link may be expired, already used, or unsupported."
         : `The provider declined the ${operation === "send" ? "email request" : "activation"}. No success was confirmed.`, diagnostic);
-  if (at(raw, config.success.path) !== config.success.value)
+  const matches = (check: { path: string; value: string | boolean | number }) =>
+    at(raw, check.path) === check.value;
+  const confirmed = matches(config.success) ||
+    config.success_alternatives?.some(checks => checks.every(matches));
+  if (!confirmed || !(config.success_all ?? []).every(matches))
     throw new AmError(502, "provider_unsuccessful", `${stage}: the provider response did not confirm success.`, diagnostic);
+  if (operation === "apply" && at(raw, "/email") !== undefined &&
+    (typeof at(raw, "/email") !== "string" || String(at(raw, "/email")).toLowerCase() !== values.email.toLowerCase()))
+    throw new AmError(502, "provider_account_mismatch", "Activation: the provider confirmed a different account. The result needs reconciliation.", diagnostic);
   return {
     receipt:
       config.receipt !== undefined

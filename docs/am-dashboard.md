@@ -98,7 +98,12 @@ format built into the Worker:
 - Header: `x-api-key`, using the `AM_API_KEY` secret without a prefix.
 - Send: `{email}`, requiring `success: true`.
 - Verify: `{email, rawLink}`, requiring `success: true` and a nonempty `idToken`.
-- Apply: `{email, idToken}`, requiring confirmed active status.
+- Apply: `{email, idToken}`, accepting either the earlier documented flat
+  `{success:true,status:"active"}` or the actual nested response with
+  `success:true`, `data.success:true`, `data.result.status:"success"`,
+  `data.result.accountLinkStatus:"linked-current"` and `data.result.valid:true`.
+  A success message alone does not confirm activation. A returned `email` must
+  match the owned account. Quota fields are not treated as activation status.
 
 If a stale or invalid `AM_API_CONTRACT` is already set in Cloudflare, remove it
 and redeploy to select these defaults. No API key belongs in this variable.
@@ -114,6 +119,10 @@ For a documented provider contract change, an explicit override defines:
     `magic_link`; only verify may use it. Send cannot use a prior receipt.
   - `success:{path,value}`: the exact provider success condition. HTTP 200 alone
     is not confirmation. The value must be boolean, a nonempty string or number.
+  - Optional `success_all`: additional checks that must all pass regardless of
+    which success variant matched.
+  - Optional `success_alternatives`: groups of checks; all checks in at least
+    one group must match if the primary success check did not match.
   - Optional `receipt`: pointer to a returned string needed by the next step.
 
 Endpoints are fixed: POST `/send-magiclink`, `/verify-account`, `/apply-premium`
@@ -311,3 +320,12 @@ per-step checks instead of gating email requests on licensing rights. A disabled
 magic-link button identifies missing provider credentials, a documented request
 format or required receipt storage. API keys and contracts still have to be
 configured from the actual provider documentation; no guessed request is sent.
+
+### Earlier activation marked uncertain
+
+A prior deployment checked the earlier documented root `status:"active"` and
+could mark a successful nested activation response as `uncertain`. This update
+recognizes the supplied real response for future calls. It cannot retroactively
+verify old outcomes because provider bodies are not persisted and no read-only
+activation-status endpoint has been supplied. Do not replay an old activation
+to correct local history; reconcile the account's actual subscription first.
