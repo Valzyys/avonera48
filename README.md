@@ -106,7 +106,7 @@ Members without a local photo fall back to the API image, served through the Wor
 
 `/am` adds private generated mailboxes, saved account history, an inbox reader and
 explicitly approved provider workflows using the existing auth and D1 bindings.
-Apply the additive migration before using it. See [AM setup, response adapters,
+AM tables are initialized automatically on first authenticated access; an additive migration is also provided. See [AM setup, response adapters,
 authorization and deployment](docs/am-dashboard.md). Provider workflows stay
 locked without verified authorization; undocumented response formats produce
 configuration errors instead of mock inboxes or fake success.

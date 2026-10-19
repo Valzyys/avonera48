@@ -1,3 +1,4 @@
+import { ensureAmSchema } from "./schema";
 import { z } from "zod";
 import type {
   AmAccount,
@@ -443,6 +444,15 @@ export async function handleAm(
         "forbidden",
         "Cross-site requests are not allowed.",
       );
+    try {
+      await ensureAmSchema(db);
+    } catch {
+      throw new AmError(
+        503,
+        "am_database_unavailable",
+        "Account management could not initialize its database. Please retry or check the D1 binding.",
+      );
+    }
     const suffix = url.pathname.slice("/api/am".length);
     if (suffix === "/status" && request.method === "GET") {
       await db.prepare("SELECT id FROM am_accounts LIMIT 1").first();
@@ -624,8 +634,7 @@ export async function handleAm(
       {
         ok: false,
         error: "am_unavailable",
-        message:
-          "Account management is unavailable. Check that the AM database migration has been applied.",
+        message: "Account management could not access its data. Please retry.",
       },
       503,
     );

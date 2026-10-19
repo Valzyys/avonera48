@@ -8,7 +8,13 @@ the signed-in dashboard.
 ## Deploy
 
 1. Install dependencies with `npm ci`.
-2. Apply the additive migration to the existing database:
+2. AM tables and indexes are created automatically on the first authenticated
+   `/api/am/*` request, using additive `IF NOT EXISTS` statements, like the
+   existing shop schema. No manual migration is required to open `/am` on an
+   existing deployment. Concurrent initialization is shared per D1 binding and
+   failed initialization can be retried.
+
+   The equivalent migration remains available for managed deployments:
 
    ```sh
    npx wrangler d1 migrations apply DB --local
