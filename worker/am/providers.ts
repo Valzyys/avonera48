@@ -8,6 +8,7 @@ import {
   type MailContract,
   type AmContract,
   type AmOperation,
+  type ProviderDiagnostic,
 } from "./contracts";
 import { extractContent, metadataPreview } from "./content";
 
@@ -20,33 +21,165 @@ const domainName = z
     /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
   );
 export { domainName };
-/** Fixed-origin requests only; redirects are never followed with credentials. */
+const MAIL_ORIGINS = new Set([MAIL, "https://www.tmailcloud.my.id"]);
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/** Only read-only Tmail redirects to its own HTTPS hosts may be followed. */
+async function fetchProvider(
+  service: "mail" | "am",
+  path: string,
+  init: RequestInit,
+  signal: AbortSignal,
+) {
+  let url = new URL(`${service === "mail" ? MAIL : AM}${path}`);
+  for (let hops = 0; ; hops++) {
+    const headers = new Headers(init.headers);
+    headers.set("accept", "application/json");
+    const response = await fetch(url.href, {
+      ...init,
+      headers,
+      signal,
+      redirect: "manual",
+    });
+    if (!REDIRECTS.has(response.status)) return response;
+    const location = response.headers.get("location");
+    await response.body?.cancel();
+    if (service !== "mail" || (init.method ?? "GET") !== "GET") {
+      throw new AmError(
+        502,
+        "provider_write_redirect",
+        "The provider redirected a write request. Its result is unconfirmed; check with the provider before retrying.",
+      );
+    }
+    if (!location || hops >= 3)
+      throw new AmError(
+        502,
+        "provider_redirect_invalid",
+        "TmailCloud returned a missing or looping redirect. Please contact the provider.",
+      );
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch {
+      throw new AmError(
+        502,
+        "provider_redirect_invalid",
+        "TmailCloud returned an invalid redirect.",
+      );
+    }
+    if (!MAIL_ORIGINS.has(next.origin) || next.username || next.password)
+      throw new AmError(
+        502,
+        "provider_redirect_blocked",
+        "TmailCloud redirected the request outside its approved HTTPS API hosts.",
+      );
+    url = next;
+  }
+}
+
+function networkError(error: unknown, method: string, service: "mail" | "am") {
+  const label = service === "mail" ? "TmailCloud" : "The account provider";
+  // Classify locally; never return exception text or URLs containing credentials.
+  const failure =
+    error instanceof Error ? `${error.name} ${error.message}` : "";
+  const cause: unknown = error instanceof Error ? error.cause : null;
+  const rawCode =
+    cause && typeof cause === "object" && "code" in cause ? cause.code : null;
+  const transportCodes = [
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_SOCKET",
+  ];
+  const transportCode =
+    typeof rawCode === "string" && transportCodes.includes(rawCode)
+      ? rawCode
+      : undefined;
+  const platformCode =
+    /\b(?:error(?: code)?|code)[: #]*(10\d{2}|11\d{2}|52\d|53\d)\b/i.exec(
+      failure,
+    )?.[1];
+  const kind = /timeout|timed out|abort/i.test(
+    `${failure} ${transportCode ?? ""}`,
+  )
+    ? "timeout"
+    : /dns|enotfound|eai_again|name.?resol/i.test(
+          `${failure} ${transportCode ?? ""}`,
+        )
+      ? "dns"
+      : /tls|ssl|certificate/i.test(failure)
+        ? "tls"
+        : "network";
+  const diagnostic: ProviderDiagnostic = {
+    service: service === "mail" ? "tmailcloud" : "amgratis",
+    method,
+    failure: kind,
+    ...(transportCode ? { transport_code: transportCode } : {}),
+    ...(platformCode ? { platform_code: platformCode } : {}),
+  };
+  if (method !== "GET")
+    return new AmError(
+      502,
+      "provider_unreachable",
+      `${label} could not be reached. The write result is unconfirmed; check its status before retrying.`,
+      diagnostic,
+    );
+  if (kind === "timeout")
+    return new AmError(
+      504,
+      "provider_timeout",
+      `${label} took too long to respond. Please retry.`,
+      diagnostic,
+    );
+  if (kind === "dns")
+    return new AmError(
+      502,
+      "provider_dns_failed",
+      `${label}'s hostname could not be resolved from this site. Please contact the provider.`,
+      diagnostic,
+    );
+  if (kind === "tls")
+    return new AmError(
+      502,
+      "provider_tls_failed",
+      `${label}'s secure connection could not be established. Please contact the provider.`,
+      diagnostic,
+    );
+  return new AmError(
+    502,
+    "provider_unreachable",
+    `${label} could not be reached from this site. Please retry.`,
+    diagnostic,
+  );
+}
+
+/** Fixed destinations; writes are never retried or redirected. */
 export async function providerRequest(
   service: "mail" | "am",
   path: string,
   init: RequestInit = {},
 ): Promise<unknown> {
-  const method = init.method ?? "GET";
+  const method = (init.method ?? "GET").toUpperCase();
   const retries = method === "GET" ? 2 : 0;
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {
-      res = await fetch(`${service === "mail" ? MAIL : AM}${path}`, {
-        ...init,
-        redirect: "error",
-        signal: AbortSignal.timeout(8000),
-        headers: { accept: "application/json", ...init.headers },
-      });
-    } catch {
+      res = await fetchProvider(
+        service,
+        path,
+        { ...init, method },
+        AbortSignal.timeout(8000),
+      );
+    } catch (error) {
+      if (error instanceof AmError) throw error;
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
         continue;
       }
-      throw new AmError(
-        502,
-        "provider_unreachable",
-        "The provider could not be reached. A write request may have been accepted; check its status before retrying.",
-      );
+      throw networkError(error, method, service);
     }
     if ((res.status === 429 || res.status >= 500) && attempt < retries) {
       await res.body?.cancel();
@@ -59,6 +192,12 @@ export async function providerRequest(
         res.status === 429 ? 429 : 502,
         "provider_rejected",
         "The provider rejected this request. Please try again later.",
+        {
+          service: service === "mail" ? "tmailcloud" : "amgratis",
+          method,
+          failure: "http",
+          upstream_status: res.status,
+        },
       );
     }
     if (!res.body)

@@ -1,10 +1,19 @@
 import { z } from "zod";
 
+export interface ProviderDiagnostic {
+  service: "tmailcloud" | "amgratis";
+  method: string;
+  failure: "network" | "timeout" | "dns" | "tls" | "http";
+  upstream_status?: number;
+  transport_code?: string;
+  platform_code?: string;
+}
 export class AmError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
+    public diagnostic?: ProviderDiagnostic,
   ) {
     super(message);
   }

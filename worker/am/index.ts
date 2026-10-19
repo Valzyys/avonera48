@@ -626,7 +626,12 @@ export async function handleAm(
   } catch (error) {
     if (error instanceof AmError)
       return reply(
-        { ok: false, error: error.code, message: error.message },
+        {
+          ok: false,
+          error: error.code,
+          message: error.message,
+          ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+        },
         error.status,
       );
     // Never log thrown provider/SQL objects, which can include mail addresses or tokens.

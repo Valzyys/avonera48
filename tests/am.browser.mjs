@@ -23,8 +23,20 @@ const account = {
 };
 let syncs = 0;
 let generated = false;
+let domainsFail = false;
 await page.route("**/api/**", async (route) => {
   const path = new URL(route.request().url()).pathname;
+  if (path === "/api/am/domains" && domainsFail)
+    return route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: "provider_unreachable",
+        message:
+          "TmailCloud could not be reached from this site. Please retry.",
+      }),
+    });
   let data = {};
   if (path === "/api/auth/me")
     data = {
@@ -192,6 +204,18 @@ try {
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  domainsFail = true;
+  await page.reload();
+  await expect(page.locator("#am-domain")).toBeDisabled();
+  await expect(page.locator("#am-domain option")).toHaveText(
+    "Could not load domains",
+  );
+  await expect(
+    page.getByRole("button", { name: "Generate Account", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".am-generator")).not.toContainText(
+    "No active domains",
+  );
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

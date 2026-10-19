@@ -354,7 +354,9 @@ function Workspace({ name }: { name: string }) {
               <option value="">
                 {domainList.length
                   ? "Choose an active domain"
-                  : "No active domains available"}
+                  : domainError
+                    ? "Could not load domains"
+                    : "No active domains returned"}
               </option>
               {domainList.map((d) => (
                 <option key={d.name} value={d.name}>

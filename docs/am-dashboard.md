@@ -193,7 +193,11 @@ must reconcile uncertain provider outcomes; no unsafe reset endpoint is exposed.
   when visible, and backs off up to 60 seconds on errors. GET provider retries use
   exponential backoff; non-idempotent writes are never automatically retried.
 - Provider requests time out after 8 seconds per attempt and response size is
-  bounded to 2 MB. Redirects are rejected. No user-controlled URL can select the
+  bounded to 2 MB. Read-only TmailCloud requests follow at most three redirects
+  within `https://tmailcloud.my.id` and `https://www.tmailcloud.my.id`, only when
+  returned by the provider. HTTPS downgrade, arbitrary hosts, credential URLs,
+  missing locations and loops are rejected. Writes and AMGratis redirects are
+  never followed. No user-controlled URL can select the
   destination host.
 - HTML uses DOMPurify allowlisting, no active links/forms/CSS URLs, a sandboxed
   iframe and restrictive CSP. Remote images are removed by default. Opting in
@@ -215,3 +219,23 @@ isolation, CSRF, domain validation, atomic quota, pagination, deduplication,
 authorization expiry/signatures, explicit link consent, encrypted receipts and
 uncertain provider outcomes. Email sanitation is tested in jsdom. Tests use
 fixtures only in test files and do not contact or activate real provider accounts.
+
+### Troubleshooting domain loading
+
+A failed domain lookup is different from an empty active-domain list. The UI
+shows "Could not load domains" on connection failure. GET failures no longer
+suggest an email was generated: no write was attempted. Response error codes
+separate `provider_timeout`, `provider_dns_failed`, `provider_tls_failed`,
+`provider_unreachable` and rejected/looping redirects. These codes do not contain
+provider response bodies, source message URLs or credentials. A lookup that
+still cannot connect requires checking provider DNS, TLS, availability or whether
+it permits Cloudflare Worker requests; the application never invents domains or
+disables HTTPS verification to hide that failure.
+
+While signed in, open `/api/am/domains` on the Avonera48 site to inspect the
+current lookup result. Failed connections include a sanitized `diagnostic`
+with service, method and failure class, and only recognized transport/platform
+codes. HTTP rejections include their upstream status. Exception messages and
+provider response bodies are not exposed. A browser successfully reaching the
+provider confirms availability from that browser; it does not establish that the
+provider permits requests from Cloudflare Workers.
