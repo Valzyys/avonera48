@@ -307,7 +307,10 @@ async function runOperation(
     .first<AmWorkflow & { provider_receipt: string | null }>();
   if (!workflow)
     throw new AmError(404, "workflow_not_found", "Workflow not found.");
-  const grant = await requireGrant(env, operation, account.email);
+  const grant =
+    operation === "send"
+      ? null
+      : await requireGrant(env, operation, account.email);
   const contract = amContract(env.AM_API_CONTRACT);
   if (!env.AM_API_KEY)
     throw new AmError(
@@ -315,7 +318,18 @@ async function runOperation(
       "am_key_missing",
       "The provider service has not been configured.",
     );
-  const codec = await receiptCodec(env, workflowId);
+  const config = contract.operations[operation];
+  if (!config)
+    throw new AmError(
+      503,
+      "provider_step_not_configured",
+      "This provider operation has not been configured.",
+    );
+  // Sending an email does not authenticate the account or grant a license.
+  const codec =
+    operation !== "send" || config.receipt !== undefined
+      ? await receiptCodec(env, workflowId)
+      : null;
   await rate(db, user, "workflow", 3600, 10);
   let link: string | undefined;
   if (operation === "verify") {
@@ -325,6 +339,7 @@ async function runOperation(
       if (
         candidate.authentication &&
         (await sha256(candidate.url)) === parsed.link_sha256 &&
+        grant &&
         permittedLink(candidate.url, detail.sender, grant)
       ) {
         link = candidate.url;
@@ -350,9 +365,10 @@ async function runOperation(
       "workflow_state",
       "This step cannot run in the current workflow state. Refresh the account.",
     );
-  const receipt = workflow.provider_receipt
-    ? await codec.open(workflow.provider_receipt)
-    : undefined;
+  const receipt =
+    codec && workflow.provider_receipt && operation !== "send"
+      ? await codec.open(workflow.provider_receipt)
+      : undefined;
   // Compare-and-swap prevents concurrent clicks and cross-step replays.
   const locked = await db
     .prepare(
@@ -380,7 +396,7 @@ async function runOperation(
           ? "verified"
           : "completed";
     const sealed = result.receipt
-      ? await codec.seal(result.receipt)
+      ? await codec!.seal(result.receipt)
       : workflow.provider_receipt;
     await db.batch([
       db
@@ -483,20 +499,65 @@ export async function handleAm(
       }
       let mail: ReturnType<typeof mailContract> = {};
       let provider = false;
+      let contract: ReturnType<typeof amContract> | null = null;
       try {
         mail = mailContract(env.TMAIL_RESPONSE_MAP);
       } catch {
         /* unavailable, shown in service status */
       }
       try {
-        amContract(env.AM_API_CONTRACT);
+        contract = amContract(env.AM_API_CONTRACT);
         provider =
+          !!contract.operations.send &&
+          !!contract.operations.verify &&
+          !!contract.operations.apply &&
           !!env.AM_API_KEY &&
           !!env.AM_WORKFLOW_SECRET &&
           env.AM_WORKFLOW_SECRET.length >= 32;
       } catch {
         /* not configured */
       }
+      const storageReady =
+        !!env.AM_WORKFLOW_SECRET && env.AM_WORKFLOW_SECRET.length >= 32;
+      const actionReady = (operation: AmOperation) => {
+        if (!env.AM_API_KEY)
+          return {
+            ready: false,
+            reason: "The account provider API credential is not configured.",
+          };
+        const config = contract?.operations[operation];
+        if (!config)
+          return {
+            ready: false,
+            reason: `${operation === "send" ? "Magic-link request" : operation === "verify" ? "Verification" : "Activation"} format has not been configured for the provider.`,
+          };
+        if (
+          (operation !== "send" || config.receipt !== undefined) &&
+          !storageReady
+        )
+          return {
+            ready: false,
+            reason: "Secure workflow storage has not been configured.",
+          };
+        const scope =
+          operation === "verify" ? "account:verify" : "license:apply";
+        if (
+          operation !== "send" &&
+          (!authorization.valid || !authorization.scopes.includes(scope))
+        )
+          return {
+            ready: false,
+            reason:
+              "Verified provider authorization is required for this step.",
+          };
+        return {
+          ready: true,
+          reason:
+            operation === "send"
+              ? "Ready to request a sign-in email with your approval."
+              : "Ready after your explicit approval.",
+        };
+      };
       return reply({
         ok: true,
         database: true,
@@ -504,6 +565,11 @@ export async function handleAm(
         detail_adapter: !!mail.message,
         authorization,
         provider_contract: provider,
+        actions: {
+          send: actionReady("send"),
+          verify: actionReady("verify"),
+          apply: actionReady("apply"),
+        },
         max_accounts: maxAccounts(env),
       });
     }

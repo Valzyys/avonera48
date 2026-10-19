@@ -263,10 +263,25 @@ function Workspace({ name }: { name: string }) {
       setOperating(false);
     }
   };
-  const authorized =
-    !!service?.authorization.valid && service.provider_contract;
-  const can = (scope: string) =>
-    authorized && service!.authorization.scopes.includes(scope);
+  const authorized = !!service?.authorization.valid;
+  const can = (scope: string) => {
+    const operation =
+      scope === "magiclink:send"
+        ? "send"
+        : scope === "account:verify"
+          ? "verify"
+          : "apply";
+    return service?.actions?.[operation]?.ready ?? false;
+  };
+  const approvalReady = approval
+    ? can(
+        approval.kind === "send"
+          ? "magiclink:send"
+          : approval.kind === "verify"
+            ? "account:verify"
+            : "license:apply",
+      )
+    : false;
   const steps = ["Mailbox", "Magic link", "Verification", "License"];
   const progress = !current
     ? -1
@@ -486,7 +501,8 @@ function Workspace({ name }: { name: string }) {
                 <p>
                   Verification and license actions remain locked until provider
                   authorization and licensing rights are verified. Mailbox and
-                  inbox access work independently.
+                  inbox access work independently. Requesting a sign-in email
+                  does not verify or activate an account.
                 </p>
               </div>
             )}
@@ -518,6 +534,11 @@ function Workspace({ name }: { name: string }) {
                 Approve activation
               </Button>
             </div>
+            {service?.actions && !service.actions.send.ready && (
+              <p className="am-help" role="status">
+                {service.actions.send.reason}
+              </p>
+            )}
             {service?.authorization.reference && (
               <p className="am-help">
                 Authorization reference: {service.authorization.reference}
@@ -954,7 +975,11 @@ function Workspace({ name }: { name: string }) {
               ? "Approve license activation"
               : "Request a magic link"
         }
-        description="This is a separate, explicit approval. The backend verifies provider authorization before making any request."
+        description={
+          approval?.kind === "send"
+            ? "This requests a sign-in email for your own mailbox only. It does not open a login link, verify an account, or activate a license."
+            : "This is a separate, explicit approval. The backend verifies provider authorization before continuing authentication or activation."
+        }
         dismissible={!operating}
         footer={
           <>
@@ -964,7 +989,7 @@ function Workspace({ name }: { name: string }) {
             <Button
               variant="primary"
               loading={operating}
-              disabled={!owns || !consent || !authorized}
+              disabled={!owns || !consent || !approvalReady}
               onClick={() => void run()}
             >
               Approve this step
@@ -984,10 +1009,12 @@ function Workspace({ name }: { name: string }) {
             rows={5}
           />
         )}
-        <p className="am-help">
-          Verified authorization:{" "}
-          {service?.authorization.reference ?? "Not available"}
-        </p>
+        {approval?.kind !== "send" && (
+          <p className="am-help">
+            Verified authorization:{" "}
+            {service?.authorization.reference ?? "Not available"}
+          </p>
+        )}
         <label className="am-check">
           <input
             type="checkbox"

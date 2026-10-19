@@ -62,6 +62,10 @@ export interface AmService {
     reference: string | null;
   };
   provider_contract: boolean;
+  actions: Record<
+    "send" | "verify" | "apply",
+    { ready: boolean; reason: string }
+  >;
   max_accounts: number;
 }
 export interface AmAccountDetail {

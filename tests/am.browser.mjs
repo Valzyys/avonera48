@@ -24,6 +24,8 @@ const account = {
 let syncs = 0;
 let generated = false;
 let domainsFail = false;
+let magicReady = false;
+let sendRequests = 0;
 await page.route("**/api/**", async (route) => {
   const path = new URL(route.request().url()).pathname;
   if (path === "/api/am/domains" && domainsFail)
@@ -61,6 +63,15 @@ await page.route("**/api/**", async (route) => {
         reference: null,
       },
       provider_contract: false,
+      actions: {
+        send: {
+          ready: magicReady,
+          reason:
+            "Magic-link request format has not been configured for the provider.",
+        },
+        verify: { ready: false, reason: "Authorization required" },
+        apply: { ready: false, reason: "Authorization required" },
+      },
       max_accounts: 20,
     };
   else if (path === "/api/am/domains")
@@ -70,6 +81,9 @@ await page.route("**/api/**", async (route) => {
       generated = true;
       data = { account };
     } else data = { items: generated ? [account] : [], next_cursor: null };
+  } else if (path.endsWith("/send")) {
+    sendRequests++;
+    data = { status: "awaiting_approval" };
   } else if (path.endsWith("/sync")) {
     syncs++;
     data = { synced: 1 };
@@ -216,6 +230,34 @@ try {
   await expect(page.locator(".am-generator")).not.toContainText(
     "No active domains",
   );
+  domainsFail = false;
+  magicReady = true;
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Request magic link", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Request magic link", exact: true })
+    .click();
+  const approve = page.getByRole("button", {
+    name: "Approve this step",
+    exact: true,
+  });
+  await expect(approve).toBeDisabled();
+  expect(sendRequests).toBe(0);
+  await page
+    .getByLabel("I own and control this mailbox and the associated account.")
+    .check();
+  await expect(approve).toBeDisabled();
+  await page
+    .getByLabel("I approve sending a sign-in email to this mailbox.")
+    .check();
+  await expect(approve).toBeEnabled();
+  await approve.click();
+  await expect.poll(() => sendRequests).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Approve activation", exact: true }),
+  ).toBeDisabled();
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

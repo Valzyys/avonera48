@@ -408,6 +408,12 @@ export async function amRequest(
   values: { email: string; magic_link?: string; receipt?: string },
 ) {
   const config = contract.operations[operation];
+  if (!config)
+    throw new AmError(
+      503,
+      "provider_step_not_configured",
+      "This provider operation has not been configured.",
+    );
   const body: Record<string, string> = {};
   for (const [key, source] of Object.entries(config.body)) {
     const value = values[source];
@@ -435,8 +441,9 @@ export async function amRequest(
   });
   requireSuccess(raw, config.success);
   return {
-    receipt: config.receipt
-      ? scalar(at(raw, config.receipt), 10000, true)
-      : null,
+    receipt:
+      config.receipt !== undefined
+        ? scalar(at(raw, config.receipt), 10000, true)
+        : null,
   };
 }

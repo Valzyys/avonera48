@@ -369,10 +369,16 @@ describe("AM approved workflows", () => {
     const { account, workflow } = await seed();
     expect(
       (
-        await call(`/accounts/${account}/workflows/${workflow}/send`, "POST", {
-          consent: true,
-          owns_account: true,
-        })
+        await call(
+          `/accounts/${account}/workflows/${workflow}/verify`,
+          "POST",
+          {
+            consent: true,
+            owns_account: true,
+            message_id: crypto.randomUUID(),
+            link_sha256: "a".repeat(64),
+          },
+        )
       ).status,
     ).toBe(403);
     await authorize(1);
@@ -383,6 +389,72 @@ describe("AM approved workflows", () => {
     await expect(readGrant(env)).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  it("allows a consented magic-link email for an owned mailbox without unlocking authentication or licensing", async () => {
+    const { account, workflow } = await seed();
+    delete env.AM_WORKFLOW_SECRET;
+    const full = JSON.parse(apiContract);
+    env.AM_API_CONTRACT = JSON.stringify({
+      ...full,
+      operations: { send: full.operations.send },
+    });
+    const status = await (await call("/status")).json();
+    expect(status.authorization.valid).toBe(false);
+    expect(status.actions.send.ready).toBe(true);
+    expect(status.actions.verify.ready).toBe(false);
+    expect(status.actions.apply.ready).toBe(false);
+    fetchMock.mockResolvedValueOnce(Response.json({ confirmed: true }));
+    const result = await call(
+      `/accounts/${account}/workflows/${workflow}/send`,
+      "POST",
+      { consent: true, owns_account: true },
+    );
+    expect(result.status).toBe(200);
+    expect((await result.json()).status).toBe("awaiting_approval");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://www.amgratis.my.id/api/v1/send-magiclink",
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).email).toContain(
+      "@bussiness.biz.id",
+    );
+    expect(
+      (
+        await call(
+          `/accounts/${account}/workflows/${workflow}/verify`,
+          "POST",
+          {
+            consent: true,
+            owns_account: true,
+            message_id: crypto.randomUUID(),
+            link_sha256: "a".repeat(64),
+          },
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call(`/accounts/${account}/workflows/${workflow}/apply`, "POST", {
+          consent: true,
+          owns_account: true,
+        })
+      ).status,
+    ).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("explains missing send setup without inventing a provider contract", async () => {
+    delete env.AM_API_CONTRACT;
+    let status = await (await call("/status")).json();
+    expect(status.actions.send.ready).toBe(false);
+    expect(status.actions.send.reason).toContain(
+      "format has not been configured",
+    );
+    delete env.AM_API_KEY;
+    status = await (await call("/status")).json();
+    expect(status.actions.send.reason).toContain(
+      "credential is not configured",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("requires step-specific consent and never opens a magic link automatically", async () => {
     const { account, workflow } = await seed();
     await authorize();

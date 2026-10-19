@@ -113,14 +113,21 @@ export const amContractSchema = z
       .max(30)
       .regex(/^[A-Za-z -]*$/),
     operations: z.object({
-      send: operation,
-      verify: operation,
-      apply: operation,
+      send: operation.optional(),
+      verify: operation.optional(),
+      apply: operation.optional(),
     }),
   })
   .strict()
   .superRefine((contract, ctx) => {
+    if (!Object.values(contract.operations).some(Boolean))
+      ctx.addIssue({
+        code: "custom",
+        path: ["operations"],
+        message: "Configure at least one documented provider operation.",
+      });
     for (const [name, operation] of Object.entries(contract.operations)) {
+      if (!operation) continue;
       const values = Object.values(operation.body);
       if (
         !values.includes("email") ||

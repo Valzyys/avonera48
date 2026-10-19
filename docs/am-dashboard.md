@@ -83,7 +83,7 @@ Do not populate it from guesses. It defines:
 
 - `auth_header`: `Authorization`, `X-API-Key`, or `x-api-key` as documented by the
   provider; `auth_prefix`: the exact prefix, including any required trailing space.
-- `operations.send`, `operations.verify`, `operations.apply`, each with:
+- `operations.send`, `operations.verify`, `operations.apply`, each configured operation with:
   - `body`: mapping of actual JSON request field names to `email`, `magic_link`,
     or `receipt`. Every operation must be bound to `email`; verify must include
     `magic_link`; only verify may use it. Send cannot use a prior receipt.
@@ -93,6 +93,10 @@ Do not populate it from guesses. It defines:
 
 Endpoints are fixed: POST `/send-magiclink`, `/verify-account`, `/apply-premium`
 on `https://www.amgratis.my.id/api/v1`. There is no arbitrary endpoint setting.
+Operations can be configured independently. Configuring only `send` is sufficient
+for user-approved magic-link email requests; it does not enable verification or
+licensing. No missing request schema is inferred from another operation.
+
 This adapter supports flat JSON request fields and string receipts. If actual
 provider documentation requires a different contract, extend and test the
 adapter against that response before enabling it.
@@ -115,7 +119,7 @@ authentication link or receipt is written to activity logs.
 
 An API key, user checkbox, administrative boolean or a third-party service name
 is **not** proof of authority to authenticate accounts or grant Alight licenses.
-To enable workflows, obtain a verifiable authorization from Alight Creative or
+To enable account verification and license activation, obtain a verifiable authorization from Alight Creative or
 its independently verified authorized licensing authority. Configure:
 
 - `AM_AUTHORIZATION_ISSUER`: exact trusted issuer URL.
@@ -133,7 +137,7 @@ The signed grant contract is:
 - Header: exactly `alg:"RS256", typ:"JWT"`.
 - `iss`: matches the configured trusted issuer; `aud`: `avonera48-am`.
 - `provider`: `https://www.amgratis.my.id/api/v1`.
-- `nbf`, `exp`: integer Unix seconds, checked on every operation.
+- `nbf`, `exp`: integer Unix seconds, checked on every verification/activation operation.
 - `reference`: nonsecret authorization reference.
 - `scopes`: any authorized subset of `magiclink:send`, `account:verify`,
   `license:apply`.
@@ -142,8 +146,10 @@ The signed grant contract is:
 - `magic_link_hosts`: exact HTTPS authentication-link hosts. Subdomains are not
   implicitly trusted.
 
-If no supported signed authorization is available, mailbox management and manual
-message review remain usable while provider workflows stay locked. Do not bypass
+If no supported signed authorization is available, mailbox management, manual
+message review, and explicitly approved magic-link email requests (with a valid
+provider key and documented send contract) remain usable. Account verification
+and activation stay locked. Do not bypass
 this guard to make a third-party activation endpoint appear functional.
 
 ## Internal API
@@ -176,7 +182,11 @@ never follows, clicks or redeems authentication URLs directly.
 
 Only a confirmed verification unlocks activation; only a confirmed activation
 response marks the workflow `completed`. Authorization is rechecked at each
-step. A database compare-and-swap and unique running-workflow index prevent
+authentication or licensing step. Sending a sign-in email requires an owned
+mailbox, a valid configured API key/send contract and explicit consent, but no
+license grant. If the documented send response includes a receipt, the workflow
+encryption secret is required before sending. Sending an email never unlocks
+verification or activation. A database compare-and-swap and unique running-workflow index prevent
 concurrent operations. A timeout/rejection after a provider write is conservatively
 marked `uncertain`, without automatic retries or claims of success. An operator
 must reconcile uncertain provider outcomes; no unsafe reset endpoint is exposed.
@@ -239,3 +249,12 @@ codes. HTTP rejections include their upstream status. Exception messages and
 provider response bodies are not exposed. A browser successfully reaching the
 provider confirms availability from that browser; it does not establish that the
 provider permits requests from Cloudflare Workers.
+
+### Workflow action readiness
+
+`GET /api/am/status` includes `actions.send`, `actions.verify` and
+`actions.apply`, each with `ready` and a nonsecret `reason`. The UI uses these
+per-step checks instead of gating email requests on licensing rights. A disabled
+magic-link button identifies missing provider credentials, a documented request
+format or required receipt storage. API keys and contracts still have to be
+configured from the actual provider documentation; no guessed request is sent.
