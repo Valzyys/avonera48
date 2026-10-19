@@ -100,6 +100,7 @@ function Workspace({ name }: { name: string }) {
   );
   const current = inbox.detail?.account ?? active;
   const workflow = inbox.detail?.workflows[0];
+  const resend = workflow?.status === "uncertain" && workflow.current_step === "send";
   const frame = useMemo(
     () => (message?.html ? emailDocument(message.html, images) : ""),
     [message?.html, images],
@@ -240,6 +241,7 @@ function Workspace({ name }: { name: string }) {
         consent: true,
         owns_account: true,
       };
+      if (approval.kind === "send" && resend) body.acknowledge_resend = true;
       if (approval.kind === "verify") {
         if (!approval.url || !messageId)
           throw new Error("Select and review an authentication link first.");
@@ -513,13 +515,13 @@ function Workspace({ name }: { name: string }) {
                 disabled={
                   !workflow ||
                   !can("magiclink:send") ||
-                  !["awaiting_email", "awaiting_approval"].includes(
+                  (!resend && !["awaiting_email", "awaiting_approval"].includes(
                     workflow.status,
-                  )
+                  ))
                 }
                 onClick={() => approve("send")}
               >
-                Request magic link
+                {resend ? "Request another email" : "Request magic link"}
               </Button>
               <Button
                 size="sm"
@@ -977,7 +979,9 @@ function Workspace({ name }: { name: string }) {
         }
         description={
           approval?.kind === "send"
-            ? "This requests a sign-in email for your own mailbox only. It does not open a login link, verify an account, or activate a license."
+            ? resend
+              ? "Check your inbox first. The previous request may already have sent an email. After one minute, you can explicitly request another; this may invalidate an earlier link. This does not verify or activate the account."
+              : "This requests a sign-in email for your own mailbox only. It does not open a login link, verify an account, or activate a license."
             : "This is a separate, explicit approval. The backend verifies provider authorization before continuing authentication or activation."
         }
         dismissible={!operating}

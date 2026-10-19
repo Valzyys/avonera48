@@ -614,5 +614,30 @@ describe("AM approved workflows", () => {
       .first();
     expect(row?.status).toBe("uncertain");
     expect(row?.error_message).not.toContain("sensitive");
+    expect(row?.error_message).toContain("provider_unreachable");
+    expect(row?.error_message).toContain("Check your inbox first");
+    const path = `/accounts/${account}/workflows/${workflow}/send`;
+    expect((await call(path, "POST", {
+      consent: true, owns_account: true,
+    })).status).toBe(400);
+    expect((await call(path, "POST", {
+      consent: true, owns_account: true, acknowledge_resend: true,
+    })).status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await db.prepare("UPDATE am_workflows SET updated_at=? WHERE id=?")
+      .bind(new Date(Date.now() - 61000).toISOString(), workflow).run();
+    fetchMock.mockResolvedValueOnce(Response.json({ confirmed: true }));
+    expect((await call(path, "POST", {
+      consent: true, owns_account: true, acknowledge_resend: true,
+    })).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((await db.prepare("SELECT status FROM am_workflows WHERE id=?")
+      .bind(workflow).first())?.status).toBe("awaiting_approval");
+    await db.prepare("UPDATE am_workflows SET status='uncertain',current_step='apply' WHERE id=?")
+      .bind(workflow).run();
+    expect((await call(path, "POST", {
+      consent: true, owns_account: true, acknowledge_resend: true,
+    })).status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

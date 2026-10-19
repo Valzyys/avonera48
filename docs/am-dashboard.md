@@ -200,8 +200,12 @@ license grant. If the documented send response includes a receipt, the workflow
 encryption secret is required before sending. Sending an email never unlocks
 verification or activation. A database compare-and-swap and unique running-workflow index prevent
 concurrent operations. A timeout/rejection after a provider write is conservatively
-marked `uncertain`, without automatic retries or claims of success. An operator
-must reconcile uncertain provider outcomes; no unsafe reset endpoint is exposed.
+marked `uncertain`, without automatic retries or claims of success. Uncertain verification or licensing outcomes require operator reconciliation.
+For an uncertain email-send step only, the user may check their inbox and approve
+a new email after a one-minute cooldown, explicitly acknowledging that the prior
+request may have succeeded. This never resets verification or licensing state.
+The stored error includes only sanitized internal error codes and HTTP status,
+never provider bodies, login links, tokens or raw exception messages.
 
 ## Limits, retention and rendering
 
@@ -214,7 +218,8 @@ must reconcile uncertain provider outcomes; no unsafe reset endpoint is exposed.
 - Inbox polls every 5 seconds while visible, aborts/pauses on hidden tabs, resumes
   when visible, and backs off up to 60 seconds on errors. GET provider retries use
   exponential backoff; non-idempotent writes are never automatically retried.
-- Provider requests time out after 8 seconds per attempt and response size is
+- TmailCloud requests time out after 8 seconds per attempt; AMGratis writes allow
+  25 seconds for email dispatch. Response size is
   bounded to 2 MB. Read-only TmailCloud requests follow at most three redirects
   within `https://tmailcloud.my.id` and `https://www.tmailcloud.my.id`, only when
   returned by the provider. HTTPS downgrade, arbitrary hosts, credential URLs,

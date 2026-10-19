@@ -171,7 +171,7 @@ export async function providerRequest(
         service,
         path,
         { ...init, method },
-        AbortSignal.timeout(8000),
+        AbortSignal.timeout(service === "am" ? 25000 : 8000),
       );
     } catch (error) {
       if (error instanceof AmError) throw error;

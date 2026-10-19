@@ -26,6 +26,8 @@ let generated = false;
 let domainsFail = false;
 let magicReady = false;
 let sendRequests = 0;
+let uncertainSend = false;
+let lastSendBody;
 await page.route("**/api/**", async (route) => {
   const path = new URL(route.request().url()).pathname;
   if (path === "/api/am/domains" && domainsFail)
@@ -83,6 +85,7 @@ await page.route("**/api/**", async (route) => {
     } else data = { items: generated ? [account] : [], next_cursor: null };
   } else if (path.endsWith("/send")) {
     sendRequests++;
+    lastSendBody = route.request().postDataJSON();
     data = { status: "awaiting_approval" };
   } else if (path.endsWith("/sync")) {
     syncs++;
@@ -128,8 +131,8 @@ await page.route("**/api/**", async (route) => {
         {
           id: "33333333-3333-4333-8333-333333333333",
           account_id: id,
-          status: "awaiting_email",
-          current_step: "mailbox_created",
+          status: uncertainSend ? "uncertain" : "awaiting_email",
+          current_step: uncertainSend ? "send" : "mailbox_created",
           error_message: null,
           created_at: date,
           updated_at: date,
@@ -258,6 +261,17 @@ try {
   await expect(
     page.getByRole("button", { name: "Approve activation", exact: true }),
   ).toBeDisabled();
+  uncertainSend = true;
+  await page.reload();
+  await page.getByRole("button", { name: "Request another email", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("previous request may already have sent an email");
+  expect(sendRequests).toBe(1);
+  await page.getByLabel("I own and control this mailbox and the associated account.").check();
+  await page.getByLabel("I approve sending a sign-in email to this mailbox.").check();
+  await page.getByRole("button", { name: "Approve this step", exact: true }).click();
+  await expect.poll(() => sendRequests).toBe(2);
+  expect(lastSendBody.acknowledge_resend).toBe(true);
+  await expect(page.getByRole("button", { name: "Approve activation", exact: true })).toBeDisabled();
   expect(errors).toEqual([]);
   console.log(
     "AM browser checks passed: generation, inbox, authorization gates, sanitized HTML, visibility pause/resume, responsive layout.",

@@ -44,6 +44,7 @@ const pageSchema = z.object({
 const consentSchema = z.object({
   consent: z.literal(true),
   owns_account: z.literal(true),
+  acknowledge_resend: z.literal(true).optional(),
 });
 const verifySchema = consentSchema.extend({
   message_id: idSchema,
@@ -359,7 +360,15 @@ async function runOperation(
       : operation === "verify"
         ? ["awaiting_email", "awaiting_approval"]
         : ["verified"];
-  if (!allowed.includes(workflow.status))
+  const resend = operation === "send" && workflow.status === "uncertain" &&
+    workflow.current_step === "send";
+  if (resend && !consent.data.acknowledge_resend)
+    throw new AmError(400, "resend_consent_required",
+      "Check the inbox first, then explicitly approve another email. The previous request may have succeeded.");
+  if (resend && Date.now() - Date.parse(workflow.updated_at) < 60000)
+    throw new AmError(429, "resend_cooldown",
+      "Wait one minute after the previous attempt and check your inbox before requesting another email.");
+  if (!allowed.includes(workflow.status) && !resend)
     throw new AmError(
       409,
       "workflow_state",
@@ -413,12 +422,18 @@ async function runOperation(
     return reply({ ok: true, status: state });
   } catch (error) {
     // A timeout cannot establish that a write failed. Never auto-retry it.
+    const detail = error instanceof AmError
+      ? `${error.message} (${error.code}${error.diagnostic?.upstream_status ? `; HTTP ${error.diagnostic.upstream_status}` : ""})`
+      : "The provider outcome could not be confirmed.";
+    const guidance = operation === "send"
+      ? "Check your inbox first. After one minute you may explicitly request another email; the previous request may have succeeded."
+      : "Contact support to confirm the outcome before continuing.";
     await db
       .prepare(
         "UPDATE am_workflows SET status='uncertain', error_message=?, updated_at=? WHERE id=?",
       )
       .bind(
-        "The provider outcome could not be confirmed. Contact support before retrying.",
+        `${detail} ${guidance}`,
         now(),
         workflowId,
       )
