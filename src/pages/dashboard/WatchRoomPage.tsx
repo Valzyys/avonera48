@@ -26,16 +26,31 @@ interface SessionJson {
  * never talks to the partner.
  */
 async function openSession(show: string): Promise<Playback> {
-  const res = await fetch("/api/room/session", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ show }),
-  });
+  // Never wait on a spinner forever: the server gives up on the partner after
+  // about 12 s per call, so 30 s means something between us is stuck.
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch("/api/room/session", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ show }),
+      signal: ctrl.signal,
+    });
+  } catch {
+    throw new ApiError(ctrl.signal.aborted ? "Opening the room is taking too long. Try again in a moment." : "Can’t reach the server. Check your connection and try again.", 0, "network");
+  } finally {
+    window.clearTimeout(timer);
+  }
   const j = (await res.json().catch(() => ({}))) as SessionJson;
   if (!res.ok || !j.playlist_url) throw new ApiError(j.message ?? "The room couldn’t open. Try again in a moment.", res.status);
   return { playlistUrl: j.playlist_url, qualities: (j.qualities ?? []).map((q) => ({ label: q.label, url: q.playlist_url })) };
 }
+
+/** Statuses where opening again right away won't help (no access, rate limited, room full). */
+const FINAL_STATUS = new Set([401, 402, 403, 429]);
 
 const SEAT = "avn.room.seat3";
 const seat = {
@@ -205,16 +220,25 @@ function Screen({ show, title, live, startsAt, now, dash }: { show: string; titl
   const enterRoom = useCallback(async (): Promise<void> => {
     setBusy(true);
     setProblem(null);
-    try {
-      const p = await openSession(show);
-      seat.set({ show });
-      setPlayback(p);
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : String(e));
-      setPlayback(null);
-    } finally {
-      setBusy(false);
+    // One quiet retry for a hiccup (timeout, 5xx) before showing a problem.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const p = await openSession(show);
+        seat.set({ show });
+        setPlayback(p);
+        break;
+      } catch (e) {
+        const status = e instanceof ApiError ? e.status : 0;
+        if (attempt < 1 && !FINAL_STATUS.has(status)) {
+          await new Promise((r) => setTimeout(r, 2500));
+          continue;
+        }
+        setProblem(e instanceof Error ? e.message : String(e));
+        setPlayback(null);
+        break;
+      }
     }
+    setBusy(false);
   }, [show]);
 
   // The show is on: walk straight in (a returning viewer isn't counted twice).
@@ -238,11 +262,35 @@ function Screen({ show, title, live, startsAt, now, dash }: { show: string; titl
     return () => window.clearInterval(t);
   }, [waiting, reloadShows]);
 
+  // The stream dropped (session refused, network gone, picture stuck): open
+  // a fresh session behind the player instead of sending the viewer back to
+  // the curtain. A few times in a row at most, so a real outage still shows.
+  const reconnects = useRef<number[]>([]);
+  const [reconnecting, setReconnecting] = useState(false);
   const fatal = useCallback(() => {
-    seat.set(null);
-    setPlayback(null);
-    setProblem("The show isn’t coming through right now. Try entering again in a moment.");
-  }, []);
+    const now = Date.now();
+    reconnects.current = reconnects.current.filter((t) => now - t < 5 * 60_000);
+    if (reconnects.current.length >= 4) {
+      seat.set(null);
+      setPlayback(null);
+      setProblem("The show isn’t coming through right now. Try entering again in a moment.");
+      return;
+    }
+    reconnects.current.push(now);
+    setReconnecting(true);
+    window.setTimeout(
+      () =>
+        void openSession(show)
+          .then((p) => setPlayback(p))
+          .catch((e: unknown) => {
+            seat.set(null);
+            setPlayback(null);
+            setProblem(e instanceof Error ? e.message : "The show isn’t coming through right now. Try entering again in a moment.");
+          })
+          .finally(() => setReconnecting(false)),
+      reconnects.current.length === 1 ? 0 : 2000,
+    );
+  }, [show]);
   const ended = useCallback(() => {
     seat.set(null);
     setPlayback(null);
@@ -255,7 +303,17 @@ function Screen({ show, title, live, startsAt, now, dash }: { show: string; titl
   if (outro === "playing") return stage(<PreShow data={preData} status="live" outro onOutroDone={outroDone} />);
   if (!live) return stage(<PreShow data={preData} status="upcoming" />);
 
-  if (playback) return <TheaterPlayer playback={playback} title={title} onEnded={ended} onFatal={fatal} />;
+  if (playback)
+    return (
+      <div className="screen-wrap">
+        <TheaterPlayer playback={playback} title={title} onEnded={ended} onFatal={fatal} />
+        {reconnecting && (
+          <span className="screen-wrap__note" role="status">
+            <span className="player__spinner" aria-hidden /> Reconnecting…
+          </span>
+        )}
+      </div>
+    );
 
   const c = formatCountdown(Date.parse(startsAt) - now);
   return (

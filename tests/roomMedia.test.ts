@@ -159,3 +159,87 @@ describe("Worker playback proxy", () => {
     expect(kv.put).not.toHaveBeenCalled();
   });
 });
+
+describe("Worker playback proxy under live load", () => {
+  const segmentUrl = async (opened: { playlist_url: string }, path = "https://partner.example/api/partner/s/seg-1.ts") => {
+    const t = new URL(opened.playlist_url, "https://site.example").searchParams.get("t")!;
+    const codec = await mediaUrls(env.PARTNER_SECRET, "viewer");
+    return new URL(`https://site.example/api/room/media?t=${t}&r=${await codec.seal(path)}`);
+  };
+
+  it("doesn't write KV for every segment when the partner rotates cookies", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    const writes = vi.mocked(kv.put).mock.calls.length;
+    for (let i = 0; i < 5; i++) {
+      fetchMock.mockResolvedValueOnce(new Response("segment", { headers: { "content-type": "video/mp2t", "set-cookie": `lb=${i}; Path=/` } }));
+      const url = await segmentUrl(opened);
+      expect((await roomMedia(new Request(url), env, kv, url)).status).toBe(200);
+    }
+    expect(vi.mocked(kv.put).mock.calls.length).toBe(writes);
+  });
+
+  it("still serves the segment when KV refuses a write", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    const saved = JSON.parse(values.get("media:viewer")!);
+    values.set("media:viewer", JSON.stringify({ ...saved, savedAt: 0 })); // due for a write
+    vi.mocked(kv.put).mockRejectedValue(new Error("KV PUT failed: 429 Too Many Requests"));
+    fetchMock.mockResolvedValueOnce(new Response("segment", { headers: { "content-type": "video/mp2t", "set-cookie": "lb=new; Path=/" } }));
+    const url = await segmentUrl(opened);
+    const res = await roomMedia(new Request(url), env, kv, url);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("segment");
+  });
+
+  it("resumes once when the playlist and a segment are refused together", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, "https://partner.example/api/partner/resume", "agent");
+    let resumes = 0;
+    fetchMock.mockImplementation(async (input: string, init: RequestInit) => {
+      if (input.endsWith("/resume")) {
+        resumes++;
+        await new Promise((r) => setTimeout(r, 20));
+        return Response.json({ ok: true, play_header_value: `renewed-${resumes}` });
+      }
+      const key = new Headers(init.headers).get("X-Play-Key");
+      return key === "private-key" ? new Response(null, { status: 403 }) : new Response("segment", { headers: { "content-type": "video/mp2t" } });
+    });
+    const a = await segmentUrl(opened, "https://partner.example/api/partner/s/seg-1.ts");
+    const b = await segmentUrl(opened, "https://partner.example/api/partner/s/seg-2.ts");
+    const [ra, rb] = await Promise.all([roomMedia(new Request(a), env, kv, a), roomMedia(new Request(b), env, kv, b)]);
+    expect([ra.status, rb.status]).toEqual([200, 200]);
+    expect(resumes).toBe(1);
+  });
+
+  it("streams octet-stream segments and still rewrites octet-stream playlists", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    const bytes = new Uint8Array(4096).map((_, i) => i % 251);
+    fetchMock.mockResolvedValueOnce(new Response(bytes, { headers: { "content-type": "application/octet-stream" } }));
+    let url = await segmentUrl(opened);
+    const seg = await roomMedia(new Request(url), env, kv, url);
+    expect(new Uint8Array(await seg.arrayBuffer())).toEqual(bytes);
+    fetchMock.mockResolvedValueOnce(new Response("#EXTM3U\n#EXTINF:2,\nseg-9.ts", { headers: { "content-type": "binary/octet-stream" } }));
+    url = await segmentUrl(opened, main);
+    const list = await (await roomMedia(new Request(url), env, kv, url)).text();
+    expect(list).toContain("/api/room/media?");
+    expect(list).not.toContain("partner.example");
+  });
+
+  it("answers 504 instead of hanging when the partner doesn't respond", async () => {
+    fetchMock.mockResolvedValueOnce(response());
+    const opened = await openProxied(env, kv, "viewer", playback, null, "agent");
+    const url = await segmentUrl(opened);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      fetchMock.mockImplementationOnce((_u: string, init: RequestInit) => new Promise((_r, reject) => init.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))));
+      const pending = roomMedia(new Request(url), env, kv, url);
+      while (fetchMock.mock.calls.length < 2) await new Promise((r) => setImmediate(r));
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect((await pending).status).toBe(504);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
