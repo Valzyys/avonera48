@@ -102,7 +102,11 @@ export function TheaterPlayer({
     let tries = 0;
     let lastRenew = 0;
     let netFails = 0;
+    let mediaFails = 0;
+    let gaveUp = false;
     const giveUp = () => {
+      if (gaveUp) return;
+      gaveUp = true;
       hls?.destroy();
       if (onFatal) onFatal();
       else setState("error");
@@ -122,9 +126,35 @@ export function TheaterPlayer({
         return setState("error");
       }
       hls?.destroy();
+      const retry = (n: number, firstByte: number, total: number) => ({
+        default: {
+          maxTimeToFirstByteMs: firstByte,
+          maxLoadTimeMs: total,
+          timeoutRetry: { maxNumRetry: n, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+          errorRetry: { maxNumRetry: n, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+        },
+      });
       const h = new HlsCtor({
-        lowLatencyMode: true,
+        // Every request makes an extra hop through this site, so play a little
+        // further from the live edge and keep more in hand: a slow segment then
+        // drains the buffer instead of freezing the picture.
+        lowLatencyMode: false,
+        liveSyncDurationCount: 4,
+        liveMaxLatencyDurationCount: 12,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
         backBufferLength: 30,
+        maxBufferHole: 1,
+        nudgeMaxRetry: 6,
+        // Don't fetch 1080p into a 640px player; start modestly and let ABR climb.
+        capLevelToPlayerSize: true,
+        abrEwmaDefaultEstimate: 1_000_000,
+        abrBandWidthFactor: 0.85,
+        abrBandWidthUpFactor: 0.6,
+        manifestLoadPolicy: retry(3, 10_000, 15_000),
+        playlistLoadPolicy: retry(6, 8_000, 12_000),
+        fragLoadPolicy: retry(6, 12_000, 30_000),
+        keyLoadPolicy: retry(4, 8_000, 12_000),
         xhrSetup: header
           ? (xhr) => {
               xhr.withCredentials = true;
@@ -153,20 +183,28 @@ export function TheaterPlayer({
       });
       h.on(HlsCtor.Events.FRAG_LOADED, () => {
         netFails = 0;
+        mediaFails = 0;
       });
       h.on(HlsCtor.Events.ERROR, (_e, d) => {
         const status = (d.response as { code?: number } | undefined)?.code;
-        // Only a refused session needs a resume; other errors are the player's to retry.
-        if (resumeUrl && (status === 401 || status === 403)) return void renew();
+        if (status === 401 || status === 403) {
+          // The session was refused and the server couldn't rotate it: resume
+          // here when we can, otherwise hand back for a fresh session.
+          if (resumeUrl) return void renew();
+          return giveUp();
+        }
         if (!d.fatal) return;
         console.warn("[player]", d.type, d.details, status ?? "");
         if (d.type === HlsCtor.ErrorTypes.NETWORK_ERROR) {
           // A playlist that can't be fetched at all won't come back by retrying.
-          const manifest = /^manifest/.test(d.details);
-          if (manifest || ++netFails > 3) return giveUp();
-          setTimeout(() => !cancelled && h.startLoad(), 1500);
-        } else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
-        else giveUp();
+          if (/^manifest/.test(d.details) || ++netFails > 6) return giveUp();
+          // Back off a little more each time (1.5 s … 9 s) while the network recovers.
+          setTimeout(() => !cancelled && h.startLoad(), Math.min(9000, 1500 * netFails));
+        } else if (d.type === HlsCtor.ErrorTypes.MEDIA_ERROR) {
+          if (++mediaFails > 3) return giveUp();
+          if (mediaFails === 2) h.swapAudioCodec();
+          h.recoverMediaError();
+        } else giveUp();
       });
       h.loadSource(url);
       h.attachMedia(el);
@@ -195,9 +233,42 @@ export function TheaterPlayer({
       start(next.playlistUrl);
     };
 
+    // Watchdog: the picture should move while it's meant to be playing. If it
+    // sits still, first step over a gap in the buffer, then ask for data
+    // again, then reload the stream, and as a last resort open a new session.
+    let lastTime = -1;
+    let stillFor = 0;
+    const watchdog = window.setInterval(() => {
+      if (cancelled || !hls || el.paused || el.seeking || document.visibilityState !== "visible") {
+        stillFor = 0;
+        lastTime = el.currentTime;
+        return;
+      }
+      if (el.currentTime !== lastTime) {
+        lastTime = el.currentTime;
+        stillFor = 0;
+        return;
+      }
+      stillFor += 2;
+      const b = el.buffered;
+      for (let k = 0; k < b.length; k++) {
+        if (b.start(k) > el.currentTime && b.start(k) - el.currentTime < 5) {
+          el.currentTime = b.start(k) + 0.1; // a hole the player didn't jump
+          return;
+        }
+      }
+      if (stillFor === 6) hls.startLoad();
+      else if (stillFor === 14 && hls.liveSyncPosition) {
+        hls.stopLoad();
+        el.currentTime = hls.liveSyncPosition;
+        hls.startLoad();
+      } else if (stillFor >= 30) giveUp();
+    }, 2000);
+
     start(source);
     return () => {
       cancelled = true;
+      window.clearInterval(watchdog);
       hls?.destroy();
       hlsRef.current = null;
       if (!hls) {

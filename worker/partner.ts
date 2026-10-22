@@ -59,7 +59,8 @@ export async function partnerCall<T>(env: PartnerEnv, method: "GET" | "POST", pa
   const headers = await signedHeaders(env, method, path, body);
   let res: Response;
   try {
-    res = await fetch(`${UPSTREAM}${path}`, { method, headers, body: method === "POST" ? body : undefined });
+    // A partner that doesn't answer must not leave the viewer on a spinner.
+    res = await fetch(`${UPSTREAM}${path}`, { method, headers, body: method === "POST" ? body : undefined, signal: AbortSignal.timeout(12_000) });
   } catch {
     return { ok: false, status: 502, data: { code: "UPSTREAM_UNREACHABLE" } as PartnerResult<T>["data"] };
   }
