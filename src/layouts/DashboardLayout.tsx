@@ -3,7 +3,7 @@ import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { LogoMark } from "@/components/layout/Logo";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Icon, Verified } from "@/components/ui";
-import { CurtainMenu, Dock, isActive, SetlistRail, setlistCodes, type NavItem } from "./DashNav";
+import { Dock, isActive, PenlightMenu, SetlistRail, setlistCodes, type NavItem } from "./DashNav";
 import { useAuth, type Account } from "@/features/auth/AuthContext";
 import { shop, type Catalog } from "@/features/members/api";
 import { toDashShows, type DashShow } from "@/features/members/stage";
@@ -53,7 +53,7 @@ export function UserAvatar({ user, size = 36, className }: { user: Pick<Account,
   );
 }
 
-/** The members' area: a setlist rail on wide screens; a dock and a curtain menu on phones. */
+/** The members' area: a setlist rail on wide screens; a dock and a penlight menu on phones. */
 export function DashboardLayout() {
   const { user } = useAuth();
   const { pathname, search } = useLocation();
@@ -100,13 +100,13 @@ function Shell({ user }: { user: Account }) {
   const watching = pathname.startsWith("/dashboard/watch/");
   const title = pageTitle(pathname);
   const liveTo = onAir ? "/dashboard/schedule" : null;
-  const [curtain, setCurtain] = useState(false);
-  const openCurtain = useCallback(() => setCurtain(true), []);
-  const closeCurtain = useCallback(() => setCurtain(false), []);
+  const [menu, setMenu] = useState(false);
+  const openMenu = useCallback(() => setMenu(true), []);
+  const closeMenu = useCallback(() => setMenu(false), []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    setCurtain(false);
+    setMenu(false);
   }, [pathname]);
 
   const membership = catalog.data?.membership;
@@ -208,7 +208,7 @@ function Shell({ user }: { user: Account }) {
             <Link to="/dashboard/profile" className="dash-top__me" aria-label={`Profile: ${user.name}`}>
               <UserAvatar user={user} size={34} />
             </Link>
-            <button type="button" className="dash-top__menu" onClick={openCurtain} aria-haspopup="dialog" aria-expanded={curtain} aria-label="Open the setlist">
+            <button type="button" className="dash-top__menu" onClick={openMenu} aria-haspopup="dialog" aria-expanded={menu} aria-label="Open the setlist">
               <Icon name="menu" size={18} />
             </button>
           </header>
@@ -217,12 +217,12 @@ function Shell({ user }: { user: Account }) {
           </main>
         </div>
 
-        <Dock items={nav} liveTo={liveTo} open={curtain} onOpen={openCurtain} />
-        <CurtainMenu
+        <Dock items={nav} liveTo={liveTo} open={menu} onOpen={openMenu} />
+        <PenlightMenu
           items={nav}
           liveTo={liveTo}
-          open={curtain}
-          onClose={closeCurtain}
+          open={menu}
+          onClose={closeMenu}
           footer={
             <>
               {pass}

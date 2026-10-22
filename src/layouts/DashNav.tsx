@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router";
 import { LogoMark } from "@/components/layout/Logo";
@@ -13,7 +13,7 @@ export interface NavItem {
   icon: IconName;
   end?: boolean;
   admin?: boolean;
-  /** Shown in the phone dock (the rest live behind the curtain). */
+  /** Shown in the phone dock (the rest are in the setlist menu). */
   dock?: boolean;
 }
 
@@ -168,7 +168,7 @@ function SetlistLink({ item, code, live, encore }: { item: NavItem; code: string
 
 /* ------------------------------------------------------------------------ */
 /* Phone: a floating dock. The marker is a drop of ink that stretches to    */
-/* the next tab and snaps into place; the middle button draws the curtain.  */
+/* the next tab and snaps into place; the middle button opens the setlist.  */
 /* ------------------------------------------------------------------------ */
 
 export function Dock({ items, liveTo, open, onOpen }: { items: NavItem[]; liveTo: string | null; open: boolean; onOpen: () => void }) {
@@ -241,7 +241,7 @@ export function Dock({ items, liveTo, open, onOpen }: { items: NavItem[]; liveTo
     <nav className="dash-dock" aria-label="Dashboard" ref={dock}>
       <span className="dock__blob" ref={blob} aria-hidden />
       {shown.slice(0, half).map(tab)}
-      <button type="button" className={cx("dock__curtain", offDock && "is-active", open && "is-open")} onClick={onOpen} aria-haspopup="dialog" aria-expanded={open}>
+      <button type="button" className={cx("dock__menu", offDock && "is-active", open && "is-open")} onClick={onOpen} aria-haspopup="dialog" aria-expanded={open}>
         <span className="dock__ring" aria-hidden />
         <span className="dock__burger" aria-hidden>
           <i />
@@ -256,11 +256,14 @@ export function Dock({ items, liveTo, open, onOpen }: { items: NavItem[]; liveTo
 }
 
 /* ------------------------------------------------------------------------ */
-/* The curtain: velvet drapes close in from both wings, the valance drops,  */
-/* and the setlist is read out over them. Closing parts the drapes again.   */
+/* The penlight menu: the stage opens as an iris from the button that was   */
+/* pressed, and every page holds up a penlight in a member colour. The one  */
+/* for the current page is lit and waving.                                  */
 /* ------------------------------------------------------------------------ */
 
-export function CurtainMenu({ items, liveTo, open, onClose, footer }: { items: NavItem[]; liveTo: string | null; open: boolean; onClose: () => void; footer: ReactNode }) {
+const PENLIGHTS = ["#e5679c", "#4b8fe2", "#ef7a3c", "#3aa877", "#b57be8", "#f2c94c", "#5fd0d6"];
+
+export function PenlightMenu({ items, liveTo, open, onClose, footer }: { items: NavItem[]; liveTo: string | null; open: boolean; onClose: () => void; footer: ReactNode }) {
   const { pathname } = useLocation();
   const codes = setlistCodes(items);
   const root = useRef<HTMLDivElement>(null);
@@ -272,35 +275,37 @@ export function CurtainMenu({ items, liveTo, open, onClose, footer }: { items: N
   useGSAP(
     () => {
       tl.current = gsap
-        .timeline({ paused: true, defaults: { ease: "power4.inOut" } })
+        .timeline({ paused: true, defaults: { ease: "expo.out" } })
         .set(root.current, { autoAlpha: 1 })
-        .fromTo(".curtain__shade", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "none" }, 0)
-        .fromTo(".curtain__drape--l", { xPercent: -104, skewX: 6 }, { xPercent: 0, skewX: 0, duration: 0.85 }, 0)
-        .fromTo(".curtain__drape--r", { xPercent: 104, skewX: -6 }, { xPercent: 0, skewX: 0, duration: 0.85 }, 0)
-        .fromTo(".curtain__valance", { yPercent: -110 }, { yPercent: 0, duration: 0.7, ease: "expo.out" }, 0.25)
-        .fromTo(".curtain__glow", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.8, ease: "expo.out" }, 0.55)
-        .fromTo(".curtain__kicker > *", { yPercent: 120 }, { yPercent: 0, duration: 0.6, stagger: 0.06, ease: "expo.out" }, 0.6)
-        .fromTo(".curtain__close, .curtain__encore", { autoAlpha: 0, scale: 0.8 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "back.out(2)" }, 0.6)
-        .fromTo(".curtain__row > *", { yPercent: 115 }, { yPercent: 0, duration: 0.7, stagger: 0.045, ease: "expo.out" }, 0.62)
-        .fromTo(".curtain__foot > *", { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out" }, 0.8);
+        .fromTo(root.current, { "--rad": 0 }, { "--rad": 150, duration: 0.9, ease: "power3.inOut" }, 0)
+        .fromTo(".pm__beams", { rotate: -40, opacity: 0 }, { rotate: 0, opacity: 1, duration: 1.2 }, 0.2)
+        .fromTo(".pm__kicker > *", { yPercent: 120 }, { yPercent: 0, duration: 0.6, stagger: 0.06 }, 0.45)
+        .fromTo(".pm__close, .pm__encore", { autoAlpha: 0, scale: 0.6 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "back.out(2.2)" }, 0.5)
+        .fromTo(".pm__stick", { scaleY: 0, autoAlpha: 0 }, { scaleY: 1, autoAlpha: 1, duration: 0.55, stagger: 0.05, ease: "back.out(2.5)" }, 0.5)
+        .fromTo(".pm__row .pm__code, .pm__row .pm__label", { x: -36, skewX: -12, autoAlpha: 0 }, { x: 0, skewX: 0, autoAlpha: 1, duration: 0.7, stagger: 0.035 }, 0.52)
+        .fromTo(".pm__foot > *", { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out" }, 0.75);
     },
     { scope: root },
   );
 
   useEffect(() => {
     const t = tl.current;
-    if (!t) return;
+    const el = root.current;
+    if (!t || !el) return;
     if (open) {
       opener.current = document.activeElement as HTMLElement | null;
+      // The iris opens from the button that was pressed.
+      const r = opener.current?.getBoundingClientRect();
+      el.style.setProperty("--ox", r ? `${r.left + r.width / 2}px` : "50%");
+      el.style.setProperty("--oy", r ? `${r.top + r.height / 2}px` : "100%");
       t.timeScale(1).play();
-      document.documentElement.classList.add("curtain-lock");
-      // The close button fades in with the setlist; focus it once it can take focus.
-      const id = window.setTimeout(() => closeBtn.current?.focus(), 1000);
+      document.documentElement.classList.add("menu-lock");
+      const id = window.setTimeout(() => closeBtn.current?.focus(), 800);
       return () => window.clearTimeout(id);
     }
-    t.timeScale(1.6).reverse();
-    document.documentElement.classList.remove("curtain-lock");
-    if (root.current?.contains(document.activeElement)) opener.current?.focus();
+    t.timeScale(1.7).reverse();
+    document.documentElement.classList.remove("menu-lock");
+    if (el.contains(document.activeElement)) opener.current?.focus();
   }, [open]);
 
   useEffect(() => {
@@ -310,47 +315,49 @@ export function CurtainMenu({ items, liveTo, open, onClose, footer }: { items: N
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  useEffect(() => () => document.documentElement.classList.remove("curtain-lock"), []);
+  useEffect(() => () => document.documentElement.classList.remove("menu-lock"), []);
 
   return createPortal(
-    <div className="curtain" ref={root} role="dialog" aria-modal="true" aria-label="Setlist" inert={!open}>
-      <span className="curtain__shade" aria-hidden onClick={onClose} />
-      <span className="curtain__drape curtain__drape--l" aria-hidden />
-      <span className="curtain__drape curtain__drape--r" aria-hidden />
-      <span className="curtain__valance" aria-hidden />
-      <span className="curtain__glow" aria-hidden />
+    <div className="pm" ref={root} role="dialog" aria-modal="true" aria-label="Setlist" inert={!open}>
+      <span className="pm__beams" aria-hidden />
 
-      <div className="curtain__stage">
-        <div className="curtain__top">
-          <p className="curtain__kicker">
+      <div className="pm__stage">
+        <div className="pm__top">
+          <p className="pm__kicker">
             <span>Setlist</span>
             <span>{today()}</span>
           </p>
-          <button type="button" className="curtain__close" onClick={onClose} ref={closeBtn} aria-label="Close the setlist">
+          <button type="button" className="pm__close" onClick={onClose} ref={closeBtn} aria-label="Close the setlist">
             <Icon name="close" size={20} />
           </button>
         </div>
 
-        <ol className="curtain__list">
-          {items.map((n, i) => (
-            <li key={n.to} className={cx(i === firstEncore && "is-encore")}>
-              {i === firstEncore && <span className="curtain__encore">Encore</span>}
-              <Link to={n.to} className={cx("curtain__row", isActive(n, pathname) && "is-active")} onClick={onClose} aria-current={isActive(n, pathname) ? "page" : undefined}>
-                <span className="curtain__code">{codes[i]}</span>
-                <span className="curtain__label">
-                  {n.label}
-                  {liveTo === n.to && <LiveTag />}
-                </span>
-              </Link>
-            </li>
-          ))}
+        <ol className="pm__list">
+          {items.map((n, i) => {
+            const on = isActive(n, pathname);
+            return (
+              <li key={n.to}>
+                {i === firstEncore && <span className="pm__encore">Encore</span>}
+                <Link to={n.to} className={cx("pm__row", on && "is-active")} onClick={onClose} aria-current={on ? "page" : undefined} style={{ "--pen": PENLIGHTS[i % PENLIGHTS.length] } as CSSProperties}>
+                  <span className="pm__stick" aria-hidden>
+                    <i />
+                  </span>
+                  <span className="pm__code">{codes[i]}</span>
+                  <span className="pm__label">
+                    {n.label}
+                    {liveTo === n.to && <LiveTag />}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ol>
 
-        <div className="curtain__foot">
+        <div className="pm__foot">
           {footer}
-          <div className="curtain__tools">
+          <div className="pm__tools">
             <ThemeToggle />
-            <Link to="/" className="curtain__back" onClick={onClose}>
+            <Link to="/" className="pm__back" onClick={onClose}>
               <Icon name="arrowLeft" size={14} /> Back to site
             </Link>
           </div>

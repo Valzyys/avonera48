@@ -1,6 +1,6 @@
 /* ==========================================================================
    Dashboard navigation: the setlist rail (desktop), the dock and the
-   curtain menu (phones). All three are "stage" pieces: dark in both themes.
+   penlight menu (phones). All three are "stage" pieces: dark in both themes.
    ========================================================================== */
 
 /* ---------- desktop: setlist rail ---------- */
@@ -574,8 +574,8 @@
     animation: live-blink 1.4s ease-in-out infinite;
   }
 
-  /* the middle button: draws the curtain */
-  .dock__curtain {
+  /* the middle button: opens the setlist */
+  .dock__menu {
     position: relative;
     z-index: 2;
     justify-self: center;
@@ -593,7 +593,7 @@
     color: #fff;
     transition: transform 0.45s var(--ease);
   }
-  .dock__curtain:active {
+  .dock__menu:active {
     transform: scale(0.92);
   }
   .dock__ring {
@@ -605,10 +605,10 @@
     mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
     animation: dock-spin 6s linear infinite;
   }
-  .dock__curtain.is-active .dock__ring {
+  .dock__menu.is-active .dock__ring {
     animation-duration: 1.8s;
   }
-  .dock__curtain.is-active {
+  .dock__menu.is-active {
     box-shadow:
       0 0 0 6px #141211,
       0 0 26px 2px rgb(229 103 156 / 0.55);
@@ -632,17 +632,17 @@
   .dock__burger i:nth-child(2) {
     width: 11px;
   }
-  .dock__curtain:hover .dock__burger i:nth-child(2) {
+  .dock__menu:hover .dock__burger i:nth-child(2) {
     width: 18px;
   }
-  .dock__curtain.is-open .dock__burger i:nth-child(1) {
+  .dock__menu.is-open .dock__burger i:nth-child(1) {
     transform: translateY(6px) rotate(45deg);
   }
-  .dock__curtain.is-open .dock__burger i:nth-child(2) {
+  .dock__menu.is-open .dock__burger i:nth-child(2) {
     opacity: 0;
     transform: scaleX(0);
   }
-  .dock__curtain.is-open .dock__burger i:nth-child(3) {
+  .dock__menu.is-open .dock__burger i:nth-child(3) {
     transform: translateY(-6px) rotate(-45deg);
   }
 }
@@ -653,7 +653,7 @@
 }
 
 @media (max-width: 760px) {
-  /* the watch room hides the dock; the header button opens the curtain instead */
+  /* the watch room hides the dock; the header button opens the setlist instead */
   .dash--watch .dash-top__menu {
     display: inline-grid;
   }
@@ -664,12 +664,15 @@
   }
 }
 
-/* ---------- the curtain menu ---------- */
+/* ---------- the penlight menu ---------- */
 
-html.curtain-lock {
+html.menu-lock {
   overflow: hidden;
 }
-.curtain {
+.pm {
+  --ox: 50%;
+  --oy: 100%;
+  --rad: 0;
   position: fixed;
   inset: 0;
   z-index: 200;
@@ -677,85 +680,50 @@ html.curtain-lock {
   visibility: hidden;
   overflow: hidden;
   color: #fbefe2;
-}
-.curtain__shade {
-  position: absolute;
-  inset: 0;
-  background: rgb(10 6 8 / 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-.curtain__drape {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 51%;
   background:
-    linear-gradient(180deg, rgb(0 0 0 / 0.4), transparent 20%, transparent 72%, rgb(0 0 0 / 0.5)),
-    repeating-linear-gradient(90deg, #3e0812 0px, #6e1124 12px, #9a1d34 19px, #78142a 26px, #43091a 40px);
+    radial-gradient(90% 55% at 50% 115%, rgb(229 103 156 / 0.28), transparent 65%),
+    radial-gradient(70% 45% at 100% 0%, rgb(75 143 226 / 0.2), transparent 60%),
+    #0d0b0e;
+  /* an iris opening from the pressed button */
+  clip-path: circle(calc(var(--rad) * 1%) at var(--ox) var(--oy));
 }
-.curtain__drape--l {
-  left: 0;
-  transform-origin: left top;
-  box-shadow: inset -40px 0 50px -20px rgb(0 0 0 / 0.65);
-}
-.curtain__drape--r {
-  right: 0;
-  transform-origin: right top;
-  box-shadow: inset 40px 0 50px -20px rgb(0 0 0 / 0.65);
-}
-.curtain__valance {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 78px;
-  background:
-    linear-gradient(180deg, transparent 72%, #d6a24e 72%, #f1cd85 75%, #b07a2c 78%, transparent 78%),
-    repeating-linear-gradient(90deg, #340610 0 16px, #5c0d1d 16px 32px),
-    #4a0a17;
-  -webkit-mask:
-    linear-gradient(#000, #000) top / 100% calc(100% - 22px) no-repeat,
-    radial-gradient(circle at 50% 0, #000 68%, transparent 70%) bottom / 44px 22px repeat-x;
-  mask:
-    linear-gradient(#000, #000) top / 100% calc(100% - 22px) no-repeat,
-    radial-gradient(circle at 50% 0, #000 68%, transparent 70%) bottom / 44px 22px repeat-x;
-  filter: drop-shadow(0 10px 14px rgb(0 0 0 / 0.5));
-}
-.curtain__glow {
+/* slow sweeping stage beams behind the list */
+.pm__beams {
   position: absolute;
   left: 50%;
-  top: 48%;
-  width: 130vmin;
-  height: 130vmin;
-  margin: -65vmin 0 0 -65vmin;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(255 214 160 / 0.26), rgb(255 214 160 / 0.06) 55%, transparent 72%);
-  mix-blend-mode: screen;
+  top: 110%;
+  width: 220vmax;
+  height: 220vmax;
+  margin: -110vmax 0 0 -110vmax;
+  background: repeating-conic-gradient(from 0deg, rgb(255 226 184 / 0.07) 0deg 6deg, transparent 6deg 30deg);
+  -webkit-mask: radial-gradient(closest-side, #000 20%, transparent 70%);
+  mask: radial-gradient(closest-side, #000 20%, transparent 70%);
+  animation: pm-sweep 40s linear infinite;
   pointer-events: none;
 }
-.curtain__stage {
+@keyframes pm-sweep {
+  to {
+    rotate: 1turn;
+  }
+}
+.pm__stage {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   height: 100%;
   max-width: 520px;
   margin: 0 auto;
-  padding: calc(96px + env(safe-area-inset-top)) 26px calc(24px + env(safe-area-inset-bottom));
+  padding: calc(22px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
   overflow-y: auto;
-  pointer-events: none;
 }
-.curtain__stage > * {
-  pointer-events: auto;
-}
-.curtain__top {
+.pm__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
-.curtain__kicker {
+.pm__kicker {
   display: flex;
   gap: 14px;
   overflow: hidden;
@@ -765,116 +733,159 @@ html.curtain-lock {
   text-transform: uppercase;
   color: #f2c27a;
 }
-.curtain__kicker span {
+.pm__kicker span {
   display: inline-block;
 }
-.curtain__close {
+.pm__close {
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  border: 1px solid rgb(255 235 210 / 0.3);
+  border: 1px solid rgb(255 235 210 / 0.22);
   border-radius: 50%;
-  background: rgb(0 0 0 / 0.28);
+  background: rgb(255 255 255 / 0.05);
   color: #fff;
   transition: transform 0.5s var(--ease);
 }
-.curtain__close:hover {
+.pm__close:hover {
   transform: rotate(90deg);
 }
-.curtain__list {
+.pm__list {
   display: grid;
-  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.curtain__row {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
+.pm__row {
+  --pen: #e5679c;
+  display: grid;
+  grid-template-columns: 14px 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
   padding: 7px 2px;
-  overflow: hidden;
-  color: rgb(251 239 226 / 0.74);
+  color: rgb(251 239 226 / 0.62);
 }
-.curtain__row > * {
-  display: inline-flex;
+/* the penlight: a handle and a glowing tube in the row's colour */
+.pm__stick {
+  position: relative;
+  justify-self: center;
+  width: 8px;
+  height: 38px;
+  transform-origin: 50% 100%;
 }
-.curtain__code {
-  min-width: 36px;
+.pm__stick::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  height: 10px;
+  border-radius: 2px 2px 3px 3px;
+  background: linear-gradient(90deg, #3a3436, #6a6264, #3a3436);
+}
+.pm__stick i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 9px;
+  border-radius: 6px 6px 2px 2px;
+  background: color-mix(in oklab, var(--pen) 35%, #2a2426);
+  transition: background 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+.pm__code {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.1em;
-  color: #f2c27a;
+  color: color-mix(in oklab, var(--pen) 70%, #fbefe2);
 }
-.curtain__label {
+.pm__label {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   font-family: var(--font-display);
-  font-size: clamp(28px, 8.4vw, 40px);
+  font-size: clamp(26px, 8vw, 38px);
   font-weight: 800;
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: -0.01em;
-  transition: transform 0.45s var(--ease), color 0.3s var(--ease);
+  transition: color 0.3s var(--ease), transform 0.45s var(--ease);
 }
-.curtain__row:hover .curtain__label,
-.curtain__row:focus-visible .curtain__label {
+.pm__label .live-tag {
+  font-family: var(--font-sans, inherit);
+}
+.pm__row:hover .pm__label,
+.pm__row:focus-visible .pm__label {
   color: #fff;
   transform: translateX(6px);
 }
-.curtain__row:focus-visible {
+.pm__row:hover .pm__stick i,
+.pm__row.is-active .pm__stick i {
+  background: linear-gradient(180deg, #fff, var(--pen) 35%);
+  box-shadow:
+    0 0 10px 2px var(--pen),
+    0 0 28px 6px color-mix(in oklab, var(--pen) 55%, transparent);
+}
+.pm__row.is-active .pm__label {
+  color: #fff;
+  text-shadow: 0 0 24px color-mix(in oklab, var(--pen) 60%, transparent);
+}
+.pm__row.is-active .pm__stick {
+  animation: pm-wave 0.9s ease-in-out infinite alternate;
+}
+@keyframes pm-wave {
+  from {
+    rotate: -16deg;
+  }
+  to {
+    rotate: 16deg;
+  }
+}
+.pm__row:focus-visible {
   outline: 2px solid #f2c27a;
   outline-offset: 2px;
   border-radius: 8px;
 }
-.curtain__row.is-active .curtain__label {
-  background: linear-gradient(90deg, #ffe2b0, #f7a6c6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.curtain__row.is-active .curtain__code::before {
-  content: "▸";
-  margin-right: 4px;
-}
-.curtain__encore {
-  display: block;
-  margin: 14px 0 2px;
+.pm__encore {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.4em;
   text-transform: uppercase;
-  color: rgb(242 194 122 / 0.75);
+  color: #e88db2;
 }
-.curtain__foot {
+.pm__encore::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed rgb(255 255 255 / 0.16);
+}
+.pm__foot {
   display: grid;
   gap: 10px;
   margin-top: auto;
   padding-top: 24px;
 }
-.curtain__tools {
+.pm__tools {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.curtain .icon-btn {
-  border-color: rgb(255 235 210 / 0.25);
-  background: rgb(0 0 0 / 0.28);
+.pm .icon-btn {
+  border-color: rgb(255 235 210 / 0.22);
+  background: rgb(255 255 255 / 0.05);
   color: #fbefe2;
 }
-.curtain__back {
+.pm__back {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: rgb(251 239 226 / 0.72);
+  color: rgb(251 239 226 / 0.7);
 }
-.curtain .dash-pass {
-  background:
-    radial-gradient(100% 140% at 0% 0%, rgb(255 214 160 / 0.18), transparent 62%),
-    rgb(0 0 0 / 0.28);
-}
-.curtain .dash-me {
-  background: rgb(0 0 0 / 0.2);
+.pm .dash-me {
+  background: rgb(255 255 255 / 0.04);
 }
