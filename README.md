@@ -110,3 +110,27 @@ AM tables are initialized automatically on first authenticated access; an additi
 authorization and deployment](docs/am-dashboard.md). Account verification and license activation stay
 locked without verified authorization; undocumented response formats produce
 configuration errors instead of mock inboxes or fake success.
+
+## Workers Builds deployment
+
+Use `npm run deploy` as the **Deploy command** in Cloudflare Workers → avonera48
+→ Settings → Build. The **Build command** can be left empty: Wrangler's existing
+`build.command` already runs `npm run build`. With both configured, the same Vite
+build runs twice. A dashboard deploy command of `npx wrangler deploy` bypasses the
+repository's deployment wrapper and must be changed to use it.
+
+The wrapper uses the installed, lockfile-pinned Wrangler and retries at most twice
+(after 15 and 30 seconds) for the specific `assets-upload-session` unknown API error
+`10013` seen before Worker upload. It preserves failures after the final attempt;
+other build, authentication, configuration and Worker validation errors are not
+retried. There is no claim that every `10013` is transient. If this particular
+asset initialization failure persists, inspect Cloudflare service status and
+contact support with the failed build log. It is a server/API failure, not the
+Vite large-chunk warning. No tokens, bindings or routes need to change for this
+wrapper. Successful live deployment still requires Cloudflare credentials in CI.
+
+Local deployment packaging check (without upload):
+
+```sh
+npm run deploy -- --dry-run --outdir /tmp/avonera48-worker-dry-run
+```
