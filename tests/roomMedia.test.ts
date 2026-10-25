@@ -72,6 +72,21 @@ describe("Worker playback proxy", () => {
     expect(fetchMock.mock.calls[2][1].headers.get("origin")).toBe("https://site.example");
   });
 
+  it("keeps encrypted HLS key and overlapping segment URLs stable on playlist refresh", async () => {
+    const playlist = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key"\n#EXTINF:6,\nseg.ts';
+    fetchMock.mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(new Response(playlist))
+      .mockResolvedValueOnce(new Response(playlist));
+    const opened = await openProxied(env, kv, "cache-viewer", playback, null, "agent");
+    const url = new URL(opened.playlist_url, "https://site.example");
+    const first = await (await roomMedia(new Request(url), env, kv, url)).text();
+    const second = await (await roomMedia(new Request(url), env, kv, url)).text();
+    expect(second).toBe(first);
+    expect(first).toContain('URI="/api/room/media?');
+    expect(first).not.toContain("partner.example");
+    expect(first).not.toContain("private-key");
+  });
+
   it("resolves relative playback URLs using the final partner URL", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://partner.example/api/partner/p/open?token=one-time" } }))
       .mockResolvedValueOnce(Response.json({ ok: true, playlist_url: "../s/main", play_header_name: "X-Play-Key", play_header_value: "key" }));

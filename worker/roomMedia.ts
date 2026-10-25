@@ -53,11 +53,12 @@ const codecs = new Map<string, ReturnType<typeof mediaUrls>>();
 const codecFor = (secret: string, uid: string) => {
   const k = `${secret}|${uid}`;
   let c = codecs.get(k);
+  if (c) codecs.delete(k); // bounded LRU of viewer-scoped codecs
   if (!c) {
-    if (codecs.size > 500) codecs.clear();
     c = mediaUrls(secret, uid);
-    codecs.set(k, c);
   }
+  codecs.set(k, c);
+  if (codecs.size > 64) codecs.delete(codecs.keys().next().value!);
   return c;
 };
 

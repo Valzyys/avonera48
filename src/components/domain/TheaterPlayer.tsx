@@ -148,6 +148,8 @@ export function TheaterPlayer({
         nudgeMaxRetry: 6,
         // Don't fetch 1080p into a 640px player; start modestly and let ABR climb.
         capLevelToPlayerSize: true,
+        // Fast downloads do not imply the browser can decode this rendition.
+        capLevelOnFPSDrop: true,
         abrEwmaDefaultEstimate: 1_000_000,
         abrBandWidthFactor: 0.85,
         abrBandWidthUpFactor: 0.6,
@@ -183,7 +185,6 @@ export function TheaterPlayer({
       });
       h.on(HlsCtor.Events.FRAG_LOADED, () => {
         netFails = 0;
-        mediaFails = 0;
       });
       h.on(HlsCtor.Events.ERROR, (_e, d) => {
         const status = (d.response as { code?: number } | undefined)?.code;
@@ -247,6 +248,7 @@ export function TheaterPlayer({
       if (el.currentTime !== lastTime) {
         lastTime = el.currentTime;
         stillFor = 0;
+        mediaFails = 0;
         return;
       }
       stillFor += 2;
@@ -257,12 +259,19 @@ export function TheaterPlayer({
           return;
         }
       }
-      if (stillFor === 6) hls.startLoad();
-      else if (stillFor === 14 && hls.liveSyncPosition) {
-        hls.stopLoad();
-        el.currentTime = hls.liveSyncPosition;
-        hls.startLoad();
-      } else if (stillFor >= 30) giveUp();
+      // startLoad() first stops the stream controller and aborts its current
+      // fragment. Do not interrupt an active download/retry after just 6 s.
+      if (stillFor === 6 && !hls.loadingEnabled) hls.startLoad();
+      else if (stillFor === 14 && hls.liveSyncPosition != null) {
+        const sync = hls.liveSyncPosition;
+        // Jump only into data already available, without restarting loaders.
+        for (let k = 0; k < b.length; k++) {
+          if (sync >= b.start(k) && sync < b.end(k)) {
+            el.currentTime = sync;
+            break;
+          }
+        }
+      } else if (stillFor >= 60) giveUp();
     }, 2000);
 
     start(source);
