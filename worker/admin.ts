@@ -19,7 +19,7 @@
 import { ensureSchema, getSetting, setSetting } from "./db";
 import { body, fail, int, randomId, reply, str } from "./http";
 import { checkPayment } from "./payment";
-import { extendMembership, grant, publicOrder, refresh, sweep, theaterShows, type Order, type Plan, type ShopEnv } from "./shop";
+import { extendMembership, grant, publicOrder, refresh, setLiveOverride, sweep, theaterShows, type Order, type Plan, type ShopEnv } from "./shop";
 
 /** An https link on WhatsApp's own hosts (channel, group invite or wa.me). */
 function waLink(u: string) {
@@ -192,6 +192,16 @@ export async function handleAdmin(request: Request, env: ShopEnv, kv: KVNamespac
   if (m && method === "DELETE" && !m[2]) {
     const r = await db.prepare("DELETE FROM plans WHERE id = ? AND sold = 0").bind(m[1]).run();
     return r.meta.changes ? reply({ ok: true }) : fail(409, "in_use", "This plan has been sold; switch it off instead.");
+  }
+
+  // Switch a show's room live before the IDN Plus listing does (or back to the listing).
+  if (method === "POST" && path === "/live") {
+    const d = await body(request);
+    const slug = str(d.show_slug, 120).toLowerCase();
+    if (!/^[a-z0-9_-]{1,120}$/.test(slug)) return fail(400, "invalid", "Choose a show.");
+    const listed = (await theaterShows(env))?.map((x) => x.slug) ?? [slug];
+    await setLiveOverride(db, slug, d.live === true, [...listed, slug]);
+    return reply({ ok: true, live: d.live === true });
   }
 
   if (method === "GET" && path === "/community") {

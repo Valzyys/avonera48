@@ -3194,3 +3194,35 @@ a.ov-show__title:hover {
     justify-content: flex-start;
   }
 }
+
+/* admin: open the room ahead of the listing */
+.live-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px dashed var(--live);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--live-ink);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.live-switch i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live-switch.is-on {
+  border-style: solid;
+  background: var(--live);
+  color: #fff;
+}
+.live-switch.is-on i {
+  animation: live-blink 1.4s ease-in-out infinite;
+}
+.live-switch:disabled {
+  opacity: 0.6;
+}
