@@ -251,6 +251,8 @@ export interface AdminAccount {
 
 export const admin = {
   summary: () => call<AdminSummary>("/api/admin/summary"),
+  /** Opens a show's room now (live) or hands it back to the IDN Plus listing. */
+  setLive: (showSlug: string, live: boolean) => call<{ live: boolean }>("/api/admin/live", { method: "POST", json: { show_slug: showSlug, live } }),
   orders: (params: { status?: string; q?: string; before?: string }) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
     return call<{ orders: Order[]; next: string | null }>(`/api/admin/orders?${q}`);

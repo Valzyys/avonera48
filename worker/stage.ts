@@ -15,6 +15,8 @@ export interface StageShow {
   startsAt: string;
   endsAt: string;
   status: "live" | "scheduled" | "ended";
+  /** An admin switched the room live (true) ahead of the listing; absent when the listing decides. */
+  forced?: boolean;
   image: string | null;
   /** Free text from the listing, without the "Show start / Team / Birthday" lines. */
   description: string;

@@ -14,7 +14,7 @@
  * link for accounts with an active membership (set in admin → Community).
  */
 
-import { ensureSchema, getSetting } from "./db";
+import { ensureSchema, getSetting, setSetting } from "./db";
 import { body, fail, randomId, reply, str } from "./http";
 import { cancelPayment, checkPayment, createPayment, isV2Ref, paymentReady, type PaymentEnv, type PayStatus } from "./payment";
 import { parseStageList, withArt, type StageShow, type TheaterRow } from "./stage";
@@ -120,6 +120,32 @@ export async function theaterShows(env: ShopEnv): Promise<StageShow[] | null> {
   } catch {
     return null;
   }
+}
+
+/* ---------- admin "go live" switch ---------- */
+
+const LIVE_KEY = "live_overrides";
+
+/** Shows an admin switched live ahead of the IDN Plus listing: slug → true. */
+export async function liveOverrides(db: D1Database): Promise<Record<string, boolean>> {
+  try {
+    return JSON.parse((await getSetting(db, LIVE_KEY)) ?? "{}") as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+export async function setLiveOverride(db: D1Database, slug: string, live: boolean, keep: string[]) {
+  const all = await liveOverrides(db);
+  // Only shows still on the listing are kept, so the setting can't grow forever.
+  const next: Record<string, boolean> = Object.fromEntries(Object.entries(all).filter(([k]) => keep.includes(k) && k !== slug));
+  if (live) next[slug] = true;
+  await setSetting(db, LIVE_KEY, JSON.stringify(next));
+}
+
+/** The listing with the admin switch applied: a forced show reads as live at once. */
+export function withOverrides(shows: StageShow[], ov: Record<string, boolean>): StageShow[] {
+  return shows.map((s) => (ov[s.slug] ? { ...s, status: "live", forced: true } : s));
 }
 
 /* ---------- prices and access ---------- */
@@ -437,7 +463,7 @@ export async function handleShop(request: Request, env: ShopEnv, viewer: Viewer,
   if (!post && path === "/catalog") return catalog(env, db, viewer);
   if (!post && path === "/shows") {
     const shows = await theaterShows(env);
-    return shows ? reply({ ok: true, shows }) : fail(502, "SHOWS_UNAVAILABLE", "The show list couldn’t be loaded. Try again in a moment.");
+    return shows ? reply({ ok: true, shows: withOverrides(shows, await liveOverrides(db)) }) : fail(502, "SHOWS_UNAVAILABLE", "The show list couldn’t be loaded. Try again in a moment.");
   }
   if (post && path === "/voucher") return voucherPreview(env, db, viewer, request);
   if (post && path === "/checkout") return checkout(env, db, viewer, request);

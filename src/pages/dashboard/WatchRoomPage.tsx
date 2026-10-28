@@ -6,7 +6,7 @@ import { readOverride, usePreShowData } from "@/components/preshow/data/usePreSh
 import type { DashShow } from "@/features/members/stage";
 import { MemberPhoto, oshi, ShowArt } from "@/components/media/Media";
 import { Icon, Skeleton, Verified } from "@/components/ui";
-import { accessOf, ApiError, chat, type ChatMessage } from "@/features/members/api";
+import { accessOf, admin, ApiError, chat, type ChatMessage } from "@/features/members/api";
 import { formatCountdown, useClock } from "@/hooks/useClock";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useDash, UserAvatar } from "@/layouts/DashboardLayout";
@@ -157,6 +157,7 @@ export default function WatchRoomPage() {
               <span className="chip chip--mute">{teamLabel(show.team)}</span>
               {show.birthday && <span className="chip chip--mute">Birthday · {show.birthday}</span>}
               <span className="chip chip--ok">{access === "membership" ? "Membership" : access === "admin" ? "Admin" : "Ticket"}</span>
+              {user.isAdmin && <LiveSwitch show={show} />}
             </div>
             <h1 className="watch-info__title">{show.title}</h1>
             <p className="meta">{showWhen(show)}</p>
@@ -349,6 +350,40 @@ function Screen({ show, title, live, startsAt, now, dash }: { show: string; titl
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Admins only: open the room before the IDN Plus listing says the show is
+ * live (it often starts early), or hand it back to the listing.
+ */
+function LiveSwitch({ show }: { show: DashShow }) {
+  const { reloadShows } = useDash();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (show.onAir && !show.forced) return <span className="chip chip--mute">Live from IDN</span>;
+  const flip = async () => {
+    const goLive = !show.forced;
+    if (goLive && !window.confirm(`Open the room for “${show.title}” now? Viewers waiting on the pre-show go straight in.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await admin.setLive(show.slug, goLive);
+      reloadShows();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t switch.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" className={cx("live-switch", show.forced && "is-on")} onClick={flip} disabled={busy} aria-pressed={!!show.forced}>
+        <i aria-hidden />
+        {busy ? "Switching…" : show.forced ? "Live (admin) · Undo" : "Go live now"}
+      </button>
+      {error && <span className="chip chip--mute" role="alert">{error}</span>}
+    </>
   );
 }
 

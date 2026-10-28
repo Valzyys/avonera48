@@ -6,6 +6,8 @@ import { bannerFor } from "./showImages";
 export interface DashShow extends ShowSummary {
   /** The listing says it is on air right now. */
   onAir: boolean;
+  /** An admin switched it live ahead of the listing. */
+  forced?: boolean;
   viewers: number;
   birthday: string | null;
   /** Free text from the listing. */
@@ -46,6 +48,7 @@ export function toDashShows(stage: StageShow[], schedule: ShowSummary[] = []): D
         bannerUrl: bannerFor(s.title) ?? s.banner ?? match?.bannerUrl ?? undefined,
         birthdayShow: !!s.birthday || !!match?.birthdayShow,
         onAir: s.status === "live",
+        forced: !!s.forced,
         viewers: s.viewers,
         birthday: s.birthday,
         blurb: s.description,
