@@ -26,6 +26,8 @@ interface SessionJson {
  * never talks to the partner.
  */
 async function openSession(show: string): Promise<Playback> {
+  // Download the player concurrently with the local authorization request.
+  void import("hls.js");
   // Never wait on a spinner forever: the server gives up on the partner after
   // about 12 s per call, so 30 s means something between us is stuck.
   const ctrl = new AbortController();

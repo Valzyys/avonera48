@@ -29,7 +29,11 @@ Then bind it:
 - **Worker:** already bound in `wrangler.jsonc` (`kv_namespaces`).
 - **Pages:** Settings → Bindings → KV namespace, variable name `AUTH`. Pages does not read `wrangler.jsonc` (it is the Worker's config), so Pages bindings are set in the dashboard.
 
-Video in the room comes from the partner API (`worker/partner.ts`). Every call is signed on the server, so the credentials never reach the browser. Set them as secrets (Pages: Settings → Variables and Secrets):
+Video now uses the server-side stream proxy (`worker/streamProxy.ts`). `STREAM_PROXY_BASE` points to the upstream; the browser receives only encrypted `/api/room/media?r=…` references on this site's domain. Ticket/membership checks remain mandatory. There is no upstream partner session or playback exchange on this path.
+
+Set `STREAM_MEDIA_SECRET` as a Worker secret for AES-GCM references. Existing deployments can reuse their private `PARTNER_SECRET` with separate cryptographic domain separation. `STREAM_PROXY_KEY` is optional if the upstream requires an API key; it is forwarded only server-to-server.
+
+The legacy partner path remains available only when `STREAM_PROXY_BASE` is not configured. Its secrets are:
 
 ```sh
 npx wrangler secret put PARTNER_KEY_ID
@@ -37,11 +41,9 @@ npx wrangler secret put PARTNER_SECRET
 npx wrangler secret put PARTNER_SERVER_IP   # the server IP registered with the partner
 ```
 
-The site's Cloudflare Worker calls `https://jkt48connect.com` directly for signed API requests and opens the exact playback URL returned by the partner. The same Worker handles playlists, keys, segments, redirects, cookies and resume. The browser only loads `/api/room/media?t=…&r=…` on this site's domain.
+Media references are authenticated AES-GCM ciphertext bound to the exact HttpOnly login cookie and user agent. Resource references expire after 10–15 minutes; the root capability lasts up to six hours and still needs valid authentication/entitlement. Logout/browser changes reject copied URLs. Every playlist URI is rewritten, and upstream session metadata is removed. Shared upstream playlist caching happens only on the server, after authorization; client responses remain private and uncached. Binary bodies stream without buffering the complete segment.
 
-Media references (`r`) are authenticated AES-GCM ciphertext bound to the viewer. Upstream URLs are never sent as readable or URL-encoded query parameters; playback credentials and cookies stay on the server.
-
-No VPS, Nginx configuration or external relay is used. The former `PARTNER_API_BASE` and `PARTNER_MEDIA_BASE` variables are ignored and can be removed from deployment settings. See [Worker playback proxy](docs/worker-proxy.md) for setup and troubleshooting.
+The playback URL must be visible to a browser that plays it. These controls stop a copied URL from working without its original authorized session; they do not prevent an authorized viewer from copying their cookies or recording the video. The upstream itself must restrict direct access if it should accept only server traffic. See [Worker playback proxy](docs/worker-proxy.md) for details.
 
 ## Tickets, memberships and payments
 

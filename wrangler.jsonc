@@ -19,6 +19,7 @@
   },
   "vars": {
     "APP_ENV": "production",
+    "STREAM_PROXY_BASE": "https://st.avonera48.id",
     "AM_MAX_ACCOUNTS": "20",
     "JKT48CONNECT_APP_URL": "https://jkt48connect.com",
     "JKT48CONNECT_SYNC_URL": "https://jkt48connect.com/api/public/avonera/sync"

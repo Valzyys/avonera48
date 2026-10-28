@@ -161,8 +161,7 @@ export default function AboutPage() {
               <p>There is no advertising and there are no analytics or tracking cookies.</p>
               <p>
                 An account stores your name, your email and a salted hash of your password; your password itself is never stored. Signing in sets a single session cookie
-                that keeps you signed in for 30 days. When you watch a show, the partner service receives an anonymous account ID so a reload doesn’t count as a
-                new viewer.
+                that keeps you signed in for 30 days. Watching a show uses a protected video proxy; your name, email and login cookie are not sent to the video source.
               </p>
               <p>Your theme choice is stored in your own browser and never leaves your device.</p>
             </Section>

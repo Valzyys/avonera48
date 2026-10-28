@@ -144,7 +144,7 @@ export async function handle(request: Request, env: Env, ctx: Ctx): Promise<Resp
   }
 
   if (!url.pathname.startsWith("/api/")) return null;
-  const auth = await handleAuth(request, env, url);
+  const auth = await handleAuth(request, env, url, ctx);
   if (auth) return auth;
   if (request.method !== "GET" && request.method !== "HEAD") return json({ ok: false, error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
 

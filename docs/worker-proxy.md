@@ -1,5 +1,19 @@
 # Worker playback proxy
 
+## Current direct proxy path
+
+When `STREAM_PROXY_BASE` is configured, `worker/streamProxy.ts` handles theater playback. The old partner flow below is disabled for new sessions. The upstream's static `/stream.m3u8` resolves the current live internally; the site's product slug remains the viewer's entitlement, not a replacement for that upstream static slug.
+
+`POST /api/room/session` authorizes the login and ticket/membership, then returns an encrypted same-origin capability without making a partner request, exchanging playback credentials, or writing playback context to KV. `STREAM_MEDIA_SECRET` (or a domain-separated derivation of the existing private `PARTNER_SECRET`) encrypts references. Cookie and user-agent binding prevents replay in a different login/browser. The root lasts up to six hours, with fresh authentication and entitlement checks amortized over 15 seconds. Child resource references expire within 10–15 minutes. URLs for identical resources remain stable within five-minute buckets to preserve HLS key/init caching.
+
+Playlists, keys and segments are fetched only from the configured HTTPS origin and approved `/stream`, `/stream.m3u8`, `/s/*` routes. Redirects stay on that origin. Upstream credentials, cookies, error bodies, server IP/session metadata and source URLs are not returned to the browser. Shared root-playlist cache entries are server-only and revalidated after three seconds when an execution context is available; they expire after 30 seconds. Browser responses remain `private, no-store`. Video/range bodies stream directly and never wait for the whole segment to download.
+
+The player starts on the lowest rendition and lets ABR rise, retains a larger forward buffer, caps quality to player size, and reduces Auto quality on decoder/FPS pressure. HLS is downloaded in parallel with local room authorization. These controls reduce avoidable loading/rebuffering; they cannot fix a slow upstream, insufficient viewer bandwidth or every decoder limitation.
+
+This is session-bound access control, not DRM. An authorized viewer necessarily receives playable media and may record it or export their session cookies. A public upstream must enforce its own server authentication to prevent direct access outside this website. No changes to the upstream server or other VPS services are made by this migration.
+
+## Legacy partner flow (only without STREAM_PROXY_BASE)
+
 The existing site Worker handles the entire theater playback flow. Playback,
 media and resume forward the site origin and origin-only Referer, derived from
 the authenticated room request URL, for the partner's registered-domain checks.

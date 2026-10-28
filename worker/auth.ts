@@ -42,8 +42,9 @@ import { body, enc, fail, hex, randomHex, reply, sameOrigin, sha256, str } from 
 import { partnerCall, partnerReady, type PartnerEnv, type PartnerSession, type PartnerShow } from "./partner";
 import { PlaybackError, openProxied, roomMedia } from "./roomMedia";
 import { accessTo, handleShop, isAdmin, type ShopEnv } from "./shop";
+import { openStreamProxy, streamProxyMedia, streamProxyReady, type StreamProxyEnv } from "./streamProxy";
 
-export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv, AmEnv {
+export interface AuthEnv extends PartnerEnv, ShopEnv, LinkEnv, AmEnv, StreamProxyEnv {
   AUTH?: KVNamespace;
 }
 
@@ -259,6 +260,7 @@ async function roomShows(env: AuthEnv) {
 }
 
 async function room(env: AuthEnv) {
+  if (streamProxyReady(env)) return reply({ ok: true, configured: true, available: true, shows: [] });
   if (!partnerReady(env)) return reply({ ok: true, configured: false, shows: [] });
   const shows = await roomShows(env);
   if (!shows) return reply({ ok: true, configured: true, available: false, shows: [] });
@@ -266,10 +268,19 @@ async function room(env: AuthEnv) {
 }
 
 async function roomSession(request: Request, env: AuthEnv, kv: KVNamespace, user: UserRecord) {
-  if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
+  if (!streamProxyReady(env) && !partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
   const data = await body(request);
   const show = str(data.show ?? data.show_slug, 80).toLowerCase();
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(show)) return fail(400, "invalid", "Choose a show.");
+
+  if (streamProxyReady(env)) {
+    if (env.DB) {
+      await ensureSchema(env.DB);
+      if (!adminOf(env, user) && !(await accessTo(env.DB, user.id, show))) return fail(402, "no_access", "Get a ticket or a membership to watch this show.");
+    }
+    if (await limited(kv, "session", request, user.id)) return fail(429, "rate_limited", "Too many tries. Wait a few minutes and enter again.");
+    return reply({ ok: true, proxied: true, ...await openStreamProxy(request, env, user.id, show), max_resolution: null });
+  }
 
   // With the shop on, a show needs a ticket or a membership (admins may always watch),
   // and the stream is the product's mapped stream or whatever the partner has open.
@@ -409,7 +420,7 @@ async function adminAccounts(request: Request, env: AuthEnv, kv: KVNamespace, me
 const forbidden = () => fail(403, "forbidden", "Cross-site requests are not allowed.");
 
 /** Handles the members' API; returns null for other paths. */
-export async function handleAuth(request: Request, env: AuthEnv, url: URL): Promise<Response | null> {
+export async function handleAuth(request: Request, env: AuthEnv, url: URL, ctx?: Pick<ExecutionContext, "waitUntil">): Promise<Response | null> {
   const path = url.pathname;
   const ours = ["/api/auth/", "/api/am/", "/api/room", "/api/shop/", "/api/admin/", "/api/avatar/", "/api/link/", "/api/integrations/jkt48connect/"].some((p) => path.startsWith(p));
   if (!ours) return null;
@@ -423,6 +434,7 @@ export async function handleAuth(request: Request, env: AuthEnv, url: URL): Prom
   // Server-to-server from JKT48Connect: signed, no cookie, no origin check.
   if (path.startsWith("/api/integrations/jkt48connect/")) return handleIntegration(request, env, url);
   if (method === "GET" && path === "/api/room/media") {
+    if (streamProxyReady(env)) return streamProxyMedia(request, env, kv, url, ctx);
     if (!partnerReady(env)) return fail(503, "not_configured", "The theater room isn’t set up yet.");
     return roomMedia(request, env, kv, url);
   }

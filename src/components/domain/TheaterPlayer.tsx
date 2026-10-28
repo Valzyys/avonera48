@@ -139,18 +139,22 @@ export function TheaterPlayer({
         // further from the live edge and keep more in hand: a slow segment then
         // drains the buffer instead of freezing the picture.
         lowLatencyMode: false,
-        liveSyncDurationCount: 4,
-        liveMaxLatencyDurationCount: 12,
-        maxBufferLength: 30,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        maxBufferLength: 45,
         maxMaxBufferLength: 60,
-        backBufferLength: 30,
-        maxBufferHole: 1,
+        backBufferLength: 20,
+        maxBufferSize: 40 * 1024 * 1024,
+        maxBufferHole: 0.5,
+        startLevel: 0,
         nudgeMaxRetry: 6,
         // Don't fetch 1080p into a 640px player; start modestly and let ABR climb.
         capLevelToPlayerSize: true,
         // Fast downloads do not imply the browser can decode this rendition.
         capLevelOnFPSDrop: true,
-        abrEwmaDefaultEstimate: 1_000_000,
+        fpsDroppedMonitoringPeriod: 3000,
+        fpsDroppedMonitoringThreshold: 0.1,
+        abrEwmaDefaultEstimate: 800_000,
         abrBandWidthFactor: 0.85,
         abrBandWidthUpFactor: 0.6,
         manifestLoadPolicy: retry(3, 10_000, 15_000),
